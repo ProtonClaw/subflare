@@ -6,6 +6,7 @@ import {
   CopyIcon,
   ExternalLinkIcon,
   GaugeIcon,
+  HistoryIcon,
   InfoIcon,
   LayersIcon,
   LinkIcon,
@@ -23,6 +24,7 @@ import { toast } from "sonner";
 import { renderSVG } from "uqr";
 import { Link, useLocation, useSearch } from "wouter";
 import { BarChart, BigNumber, ClientShare, PageHeader, Panel, PanelTitle, ProgressBar, Segmented } from "@/components/kit";
+import { PullLogList } from "@/components/pull-log-list";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -182,6 +184,10 @@ function Detail({ sub, now }: { sub: SubscriptionDetail; now: number }) {
           <SourcesPanel sub={sub} />
           <NodesPanel sub={sub} />
         </div>
+        <Panel>
+          <PanelTitle icon={HistoryIcon} title="拉取记录" description="每次拉取的时间、IP、地区和客户端，保留 90 天。" />
+          <PullLogList subscriptionId={sub.id} />
+        </Panel>
       </div>
 
       <AlertDialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
@@ -191,7 +197,7 @@ function Detail({ sub, now }: { sub: SubscriptionDetail; now: number }) {
             <AlertDialogDescription>
               {confirm === "delete"
                 ? "删除后订阅链接立即失效，拉取记录也会一并删除，此操作无法撤销。"
-                : "旧链接将立即失效，需要在所有客户端中更新为新链接。"}
+                : "旧链接将立即失效，需要在所有客户端中更新为新链接。之后仍用旧链接拉取的请求会在拉取记录中标为「旧链接」。"}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -310,7 +316,7 @@ function PullsPanel({ sub }: { sub: SubscriptionDetail }) {
     <Panel className="xl:col-span-2">
       <PanelTitle
         icon={ActivityIcon}
-        title="拉取记录"
+        title="拉取统计"
         description={pulls.data ? `近 ${range} 天共 ${total} 次` : undefined}
         action={<Segmented value={range} options={RANGES} onChange={setRange} />}
       />

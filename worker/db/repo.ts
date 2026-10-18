@@ -2,7 +2,7 @@ import type { ParsedNode } from "@subboost/core/types/node";
 import type { SubscriptionUserInfo } from "@subboost/core/subscription/subscription-userinfo";
 import { and, desc, eq, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { pullStats, subscriptions } from "./schema";
+import { pullLogs, pullStats, retiredTokens, subscriptions } from "./schema";
 
 export type SourceType = "url" | "nodes";
 
@@ -58,6 +58,23 @@ export type RefreshResult = Pick<Subscription, "nodes" | "userinfo" | "lastError
 
 export type PullStatRow = { subscriptionId: string; day: string; client: string; count: number };
 
+export type PullStatus = (typeof pullLogs.$inferSelect)["status"];
+
+/** Request details captured for each pull. */
+export type PullLogEntry = Omit<typeof pullLogs.$inferInsert, "id" | "subscriptionId" | "at" | "status">;
+
+export type PullLog = typeof pullLogs.$inferSelect & { subscriptionName: string | null };
+
+export type PullLogQuery = {
+  subscriptionId?: string;
+  ip?: string;
+  client?: string;
+  status?: PullStatus;
+  /** Only rows with a smaller id, for pagination. */
+  before?: number;
+  limit: number;
+};
+
 export interface SubscriptionRepository {
   list(): Promise<SubscriptionSummary[]>;
   get(id: string): Promise<Subscription | null>;
@@ -66,11 +83,15 @@ export interface SubscriptionRepository {
   update(id: string, input: NewSubscription, refresh: RefreshResult): Promise<Subscription | null>;
   saveRefresh(id: string, refresh: RefreshResult): Promise<void>;
   saveNodes(id: string, nodes: ParsedNode[], config: SubscriptionConfig): Promise<Subscription | null>;
-  rotateToken(id: string, token: string): Promise<string | null>;
+  rotateToken(id: string, token: string, previousToken: string): Promise<string | null>;
   delete(id: string): Promise<Subscription | null>;
   listDueForRefresh(now: number, limit: number): Promise<Subscription[]>;
   listByTemplate(templateId: string): Promise<Array<Pick<Subscription, "id" | "name" | "token">>>;
-  recordPull(id: string, client: string, now: number): Promise<void>;
+  recordPull(id: string, status: Exclude<PullStatus, "revoked">, entry: PullLogEntry, now: number): Promise<void>;
+  /** Logs a pull made with a rotated-out token; returns false when the token was never ours. */
+  recordRetiredTokenPull(token: string, entry: PullLogEntry, now: number): Promise<boolean>;
+  listPullLogs(query: PullLogQuery): Promise<PullLog[]>;
+  prunePullLogs(before: number): Promise<void>;
   listPullStats(sinceDay: string, subscriptionId?: string): Promise<PullStatRow[]>;
   prunePullStats(beforeDay: string): Promise<void>;
 }
@@ -185,19 +206,20 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
         .get();
       return row ? toSubscription(row) : null;
     },
-    async rotateToken(id, token) {
-      const row = await db
-        .update(subscriptions)
-        .set({ token, updatedAt: Date.now() })
-        .where(eq(subscriptions.id, id))
-        .returning({ token: subscriptions.token })
-        .get();
-      return row?.token ?? null;
+    async rotateToken(id, token, previousToken) {
+      const now = Date.now();
+      const [rows] = await db.batch([
+        db.update(subscriptions).set({ token, updatedAt: now }).where(eq(subscriptions.id, id)).returning({ token: subscriptions.token }),
+        db.insert(retiredTokens).values({ token: previousToken, subscriptionId: id, retiredAt: now }).onConflictDoNothing(),
+      ]);
+      return rows[0]?.token ?? null;
     },
     async delete(id) {
       const [rows] = await db.batch([
         db.delete(subscriptions).where(eq(subscriptions.id, id)).returning(),
         db.delete(pullStats).where(eq(pullStats.subscriptionId, id)),
+        db.delete(pullLogs).where(eq(pullLogs.subscriptionId, id)),
+        db.delete(retiredTokens).where(eq(retiredTokens.subscriptionId, id)),
       ]);
       return rows[0] ? toSubscription(rows[0]) : null;
     },
@@ -227,8 +249,15 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
         .where(eq(subscriptions.templateId, templateId))
         .all();
     },
-    async recordPull(id, client, now) {
+    async recordPull(id, status, entry, now) {
+      const log = db.insert(pullLogs).values({ ...entry, subscriptionId: id, at: now, status });
+      if (status !== "ok") {
+        await log.run();
+        return;
+      }
+      const { client } = entry;
       await db.batch([
+        log,
         db
           .insert(pullStats)
           .values({ subscriptionId: id, day: statsDay(now), client, count: 1 })
@@ -237,6 +266,37 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
             set: { count: sql`${pullStats.count} + 1` },
           }),
         db.update(subscriptions).set({ lastPulledAt: now, lastClient: client }).where(eq(subscriptions.id, id)),
+      ]);
+    },
+    async recordRetiredTokenPull(token, entry, now) {
+      const retired = await db.select().from(retiredTokens).where(eq(retiredTokens.token, token)).get();
+      if (!retired) return false;
+      await db.insert(pullLogs).values({ ...entry, subscriptionId: retired.subscriptionId, at: now, status: "revoked" }).run();
+      return true;
+    },
+    async listPullLogs({ subscriptionId, ip, client, status, before, limit }) {
+      const rows = await db
+        .select({ log: pullLogs, subscriptionName: subscriptions.name })
+        .from(pullLogs)
+        .leftJoin(subscriptions, eq(subscriptions.id, pullLogs.subscriptionId))
+        .where(
+          and(
+            subscriptionId ? eq(pullLogs.subscriptionId, subscriptionId) : undefined,
+            ip ? eq(pullLogs.ip, ip) : undefined,
+            client ? eq(pullLogs.client, client) : undefined,
+            status ? eq(pullLogs.status, status) : undefined,
+            before ? lt(pullLogs.id, before) : undefined
+          )
+        )
+        .orderBy(desc(pullLogs.id))
+        .limit(limit)
+        .all();
+      return rows.map(({ log, subscriptionName }) => ({ ...log, subscriptionName }));
+    },
+    async prunePullLogs(before) {
+      await db.batch([
+        db.delete(pullLogs).where(lt(pullLogs.at, before)),
+        db.delete(retiredTokens).where(lt(retiredTokens.retiredAt, before)),
       ]);
     },
     async listPullStats(sinceDay, subscriptionId) {

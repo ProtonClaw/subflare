@@ -49,6 +49,15 @@ const NodeEditsSchema = z.object({
   restore: z.array(z.number().int().min(0)).max(1000).optional(),
 });
 
+const PullLogQuerySchema = z.object({
+  subscriptionId: z.string().min(1).max(64).optional(),
+  ip: z.string().min(1).max(64).optional(),
+  client: z.string().min(1).max(64).optional(),
+  status: z.enum(["ok", "empty", "revoked"]).optional(),
+  before: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 const PreviewSchema = z.object({ mode: ModeSchema, sources: z.array(SourceSchema).min(1).max(20) });
 
 function summarizeNodes(nodes: ParsedNode[]) {
@@ -142,6 +151,12 @@ export const subscriptionRoutes = base
       perSubscription,
     });
   })
+  .get("/stats/pull-logs", validate("query", PullLogQuerySchema), async (c) => {
+    const query = c.req.valid("query");
+    const rows = await createD1SubscriptionRepository(c.env.DB).listPullLogs({ ...query, limit: query.limit + 1 });
+    const items = rows.slice(0, query.limit);
+    return c.json({ items, nextBefore: rows.length > query.limit ? items[items.length - 1].id : null });
+  })
   .get("/subscriptions", async (c) => {
     return c.json({ items: await createD1SubscriptionRepository(c.env.DB).list() });
   })
@@ -186,7 +201,7 @@ export const subscriptionRoutes = base
     const repo = createD1SubscriptionRepository(c.env.DB);
     const sub = await repo.get(c.req.param("id"));
     if (!sub) return c.json({ error: "Not Found" }, 404);
-    const token = await repo.rotateToken(sub.id, newToken());
+    const token = await repo.rotateToken(sub.id, newToken(), sub.token);
     await invalidateYaml(c.env.KV, sub.token);
     return c.json({ token }, 200);
   })

@@ -1,6 +1,7 @@
 import { app } from "./app";
 import { createD1SubscriptionRepository, statsDay } from "./db/repo";
 import { refreshDueSubscriptions } from "./lib/auto-refresh";
+import { PULL_LOG_RETENTION_DAYS } from "./lib/pull-log";
 
 const PULL_STATS_RETENTION_DAYS = 30;
 
@@ -12,10 +13,8 @@ export default {
         console.log(`[cron] ${controller.cron}`, JSON.stringify(summary))
       )
     );
-    ctx.waitUntil(
-      createD1SubscriptionRepository(env.DB).prunePullStats(
-        statsDay(Date.now() - PULL_STATS_RETENTION_DAYS * 86_400_000)
-      )
-    );
+    const repo = createD1SubscriptionRepository(env.DB);
+    ctx.waitUntil(repo.prunePullStats(statsDay(Date.now() - PULL_STATS_RETENTION_DAYS * 86_400_000)));
+    ctx.waitUntil(repo.prunePullLogs(Date.now() - PULL_LOG_RETENTION_DAYS * 86_400_000));
   },
 } satisfies ExportedHandler<Env>;

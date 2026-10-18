@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { LoginScreen } from "@/components/login";
 import { useMe } from "@/hooks/use-api";
 import { DashboardPage } from "@/pages/dashboard";
+import { PullLogsPage } from "@/pages/pull-logs";
 import { SettingsPage } from "@/pages/settings";
 import { SubscriptionDetailPage } from "@/pages/subscription-detail";
 import { SubscriptionEditPage } from "@/pages/subscription-edit";
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/templates/new">{() => <TemplateEditPage />}</Route>
         <Route path="/templates/builtin/:id">{(p) => <BuiltinTemplatePage id={p.id} />}</Route>
         <Route path="/templates/:id">{(p) => <TemplateEditPage id={p.id} />}</Route>
+        <Route path="/pull-logs" component={PullLogsPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route>
           <Redirect to="/" />

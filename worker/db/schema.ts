@@ -47,3 +47,35 @@ export const pullStats = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.subscriptionId, t.day, t.client] }), index("pull_stats_day_idx").on(t.day)]
 );
+
+export const pullLogs = sqliteTable(
+  "pull_logs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    subscriptionId: text("subscription_id").notNull(),
+    at: integer("at").notNull(),
+    /** ok: served; empty: no nodes to serve; revoked: pulled with a token retired by rotation. */
+    status: text("status", { enum: ["ok", "empty", "revoked"] }).notNull(),
+    ip: text("ip"),
+    country: text("country"),
+    region: text("region"),
+    city: text("city"),
+    asn: integer("asn"),
+    asOrg: text("as_org"),
+    colo: text("colo"),
+    client: text("client").notNull(),
+    userAgent: text("user_agent"),
+  },
+  (t) => [index("pull_logs_sub_idx").on(t.subscriptionId, t.id), index("pull_logs_at_idx").on(t.at)]
+);
+
+/** Tokens replaced by rotation, so pulls with an old link can still be attributed. */
+export const retiredTokens = sqliteTable(
+  "retired_tokens",
+  {
+    token: text("token").primaryKey(),
+    subscriptionId: text("subscription_id").notNull(),
+    retiredAt: integer("retired_at").notNull(),
+  },
+  (t) => [index("retired_tokens_sub_idx").on(t.subscriptionId)]
+);

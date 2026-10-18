@@ -1,5 +1,6 @@
 import {
   ChevronsUpDownIcon,
+  HistoryIcon,
   LayoutDashboardIcon,
   LayoutTemplateIcon,
   ListIcon,
@@ -30,7 +31,10 @@ type NavItem = { href: string; label: string; icon: LucideIcon; match: (path: st
 const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: "总览",
-    items: [{ href: "/", label: "仪表盘", icon: LayoutDashboardIcon, match: (p) => p === "/" }],
+    items: [
+      { href: "/", label: "仪表盘", icon: LayoutDashboardIcon, match: (p) => p === "/" },
+      { href: "/pull-logs", label: "拉取记录", icon: HistoryIcon, match: (p) => p === "/pull-logs" },
+    ],
   },
   {
     group: "订阅",

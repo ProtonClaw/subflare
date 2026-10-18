@@ -20,6 +20,22 @@ export function formatRelative(ms: number | null | undefined): string {
   return new Date(ms).toLocaleDateString("zh-CN");
 }
 
+const dateTimeFormat = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+/** Absolute timestamp in Beijing time, matching how pull stats are bucketed. */
+export function formatDateTime(ms: number): string {
+  return dateTimeFormat.format(ms);
+}
+
 export function formatDate(seconds: number): string {
   return new Date(seconds * 1000).toLocaleDateString("zh-CN");
 }

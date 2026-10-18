@@ -1,10 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api,
   unwrap,
   type Meta,
   type NodeEdits,
   type NodeState,
+  type PullLogFilters,
+  type PullLogPage,
   type PullStats,
   type TemplateDetail,
   type TemplateInput,
@@ -23,6 +25,7 @@ export const keys = {
   meta: ["meta"] as const,
   list: ["subscriptions"] as const,
   pulls: ["stats", "pulls"] as const,
+  pullLogs: ["stats", "pull-logs"] as const,
   templates: ["templates"] as const,
   detail: (id: string) => ["subscriptions", id] as const,
   nodes: (id: string) => ["subscriptions", id, "nodes"] as const,
@@ -59,6 +62,19 @@ export function useSubscriptions() {
   return useQuery({
     queryKey: keys.list,
     queryFn: async () => (await unwrap<{ items: SubscriptionSummary[] }>(api.subscriptions.$get())).items,
+  });
+}
+
+export function usePullLogs(filters: PullLogFilters) {
+  return useInfiniteQuery({
+    queryKey: [...keys.pullLogs, filters],
+    queryFn: ({ pageParam }) =>
+      unwrap<PullLogPage>(
+        api.stats["pull-logs"].$get({ query: { ...filters, ...(pageParam ? { before: String(pageParam) } : {}) } })
+      ),
+    initialPageParam: null as number | null,
+    getNextPageParam: (last) => last.nextBefore,
+    refetchInterval: 60_000,
   });
 }
 
