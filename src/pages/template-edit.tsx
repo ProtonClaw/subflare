@@ -275,7 +275,7 @@ function TemplateForm({
                 const hint = RULE_TYPES.find((t) => t.value === rule.type)?.hint;
                 const targetOk = isTargetValid(rule.target, enabled);
                 return (
-                  <li key={rule.id ?? i} className="grid gap-2 rounded-2xl bg-muted/50 p-2.5 sm:grid-cols-[10rem_1fr_12rem_auto]">
+                  <li key={rule.id ?? i} className="grid gap-2 rounded-2xl bg-muted/50 p-2.5 sm:grid-cols-[11.5rem_1fr_12rem_auto]">
                     <Select value={rule.type} onValueChange={(v) => setRule(i, { type: v as Rule["type"] })}>
                       <SelectTrigger className="w-full bg-card">
                         <SelectValue />
@@ -315,6 +315,7 @@ function TemplateForm({
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="justify-self-end"
                       aria-label="删除规则"
                       onClick={() => update({ customRules: config.customRules.filter((_, j) => j !== i) })}
                     >
@@ -333,7 +334,7 @@ function TemplateForm({
             title="基础配置"
             description="端口、局域网访问、DNS、嗅探等不属于分流的设置。"
             action={
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-sm whitespace-nowrap">
                 自定义 YAML
                 <Switch
                   checked={customYaml}
