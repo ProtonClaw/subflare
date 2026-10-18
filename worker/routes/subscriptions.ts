@@ -4,7 +4,7 @@ import { getTemplateList } from "@subboost/core/templates";
 import type { ParsedNode } from "@subboost/core/types/node";
 import { Hono } from "hono";
 import { z } from "zod";
-import { createD1SubscriptionRepository, utcDay, type NewSubscription, type Subscription } from "../db/repo";
+import { createD1SubscriptionRepository, statsDay, type NewSubscription, type Subscription } from "../db/repo";
 import { createD1TemplateRepository } from "../db/templates-repo";
 import { requireAuth, type AuthEnv } from "../lib/auth";
 import { validate } from "../lib/validate";
@@ -113,7 +113,7 @@ export const subscriptionRoutes = base
   ), async (c) => {
     const { days, subscriptionId } = c.req.valid("query");
     const now = Date.now();
-    const dayKeys = Array.from({ length: days }, (_, i) => utcDay(now - (days - 1 - i) * 86_400_000));
+    const dayKeys = Array.from({ length: days }, (_, i) => statsDay(now - (days - 1 - i) * 86_400_000));
     const rows = await createD1SubscriptionRepository(c.env.DB).listPullStats(dayKeys[0], subscriptionId);
 
     const perDay = new Map(dayKeys.map((d) => [d, 0]));

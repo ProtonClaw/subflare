@@ -1,5 +1,5 @@
 import { app } from "./app";
-import { createD1SubscriptionRepository, utcDay } from "./db/repo";
+import { createD1SubscriptionRepository, statsDay } from "./db/repo";
 import { refreshDueSubscriptions } from "./lib/auto-refresh";
 
 const PULL_STATS_RETENTION_DAYS = 30;
@@ -14,7 +14,7 @@ export default {
     );
     ctx.waitUntil(
       createD1SubscriptionRepository(env.DB).prunePullStats(
-        utcDay(Date.now() - PULL_STATS_RETENTION_DAYS * 86_400_000)
+        statsDay(Date.now() - PULL_STATS_RETENTION_DAYS * 86_400_000)
       )
     );
   },

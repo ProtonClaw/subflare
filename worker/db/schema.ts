@@ -40,7 +40,7 @@ export const pullStats = sqliteTable(
   "pull_stats",
   {
     subscriptionId: text("subscription_id").notNull(),
-    /** UTC date, YYYY-MM-DD. */
+    /** Beijing-time (UTC+8) date, YYYY-MM-DD. */
     day: text("day").notNull(),
     client: text("client").notNull(),
     count: integer("count").notNull().default(0),

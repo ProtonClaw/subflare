@@ -70,8 +70,11 @@ export interface SubscriptionRepository {
   prunePullStats(beforeDay: string): Promise<void>;
 }
 
-export function utcDay(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
+const STATS_TZ_OFFSET_MS = 8 * 3600_000;
+
+/** Pull-stat day bucket in Beijing time (UTC+8), YYYY-MM-DD. */
+export function statsDay(ms: number): string {
+  return new Date(ms + STATS_TZ_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 type Row = typeof subscriptions.$inferSelect;
@@ -214,7 +217,7 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
       await db.batch([
         db
           .insert(pullStats)
-          .values({ subscriptionId: id, day: utcDay(now), client, count: 1 })
+          .values({ subscriptionId: id, day: statsDay(now), client, count: 1 })
           .onConflictDoUpdate({
             target: [pullStats.subscriptionId, pullStats.day, pullStats.client],
             set: { count: sql`${pullStats.count} + 1` },
