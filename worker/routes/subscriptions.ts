@@ -32,14 +32,24 @@ const SourceSchema = z.object({
 
 const ModeSchema = z.enum(["provider", "snapshot"]);
 
+const UserAgentSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .regex(/^[\x20-\x7e]*$/, "User-Agent 只能包含可见 ASCII 字符")
+  .optional()
+  .transform((value) => value || undefined);
+
 const SubscriptionInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
+  note: z.string().trim().max(500).default(""),
   mode: ModeSchema,
   config: z.object({
     sources: z.array(SourceSchema).min(1).max(20),
     template: z.enum(["minimal", "standard", "full"]),
     enabledGroups: z.array(z.string().max(64)).max(200).optional(),
     templateId: z.string().min(1).max(64).optional(),
+    userAgent: UserAgentSchema,
   }),
   autoUpdateInterval: z.number().int().min(1800).max(7 * 86400).nullable(),
 });
@@ -59,7 +69,7 @@ const PullLogQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
-const PreviewSchema = z.object({ mode: ModeSchema, sources: z.array(SourceSchema).min(1).max(20) });
+const PreviewSchema = z.object({ mode: ModeSchema, sources: z.array(SourceSchema).min(1).max(20), userAgent: UserAgentSchema });
 
 function summarizeNodes(nodes: ParsedNode[]) {
   return nodes.slice(0, MAX_PREVIEW_NODES).map((n) => ({ name: n.name, type: n.type, server: n.server, port: n.port }));
@@ -116,8 +126,8 @@ export const subscriptionRoutes = base
     })
   )
   .post("/preview", validate("json", PreviewSchema), async (c) => {
-    const { mode, sources } = c.req.valid("json");
-    const collected = await collectNodes(sources, { mode, fetchRemote: true });
+    const { mode, sources, userAgent } = c.req.valid("json");
+    const collected = await collectNodes(sources, { mode, fetchRemote: true, userAgent });
     return c.json({
       sources: collected.sources,
       nodeCount: collected.allNodes.length,

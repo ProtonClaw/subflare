@@ -37,6 +37,15 @@ https://example.com/api/v1/client/subscribe?token=xxxx
 
 也可以直接粘贴节点（ss:// vmess:// vless:// trojan:// hy2:// …）、Base64 订阅内容或 Clash YAML`;
 
+const USER_AGENT_PRESETS = [
+  "clash-verge/v2.2.3",
+  "mihomo/1.19.0",
+  "ClashMetaForAndroid/2.11.0",
+  "Stash/2.4.0 Clash/1.9.0",
+  "Shadowrocket/2.2.50",
+  "v2rayN/7.0",
+];
+
 const MODE_DESCRIPTION: Record<Mode, string> = {
   provider: "生成 proxy-providers，客户端自己去机场拉取节点。机场屏蔽 Cloudflare 时也能用。",
   snapshot: "Cloudflare 定时抓取机场订阅并展开为节点，可显示流量和到期信息。",
@@ -87,6 +96,8 @@ export function SubscriptionEditPage({ id }: { id?: string }) {
 function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: SubscriptionDetail; backHref: string }) {
   const [, navigate] = useLocation();
   const [name, setName] = useState(initial?.name ?? "");
+  const [note, setNote] = useState(initial?.note ?? "");
+  const [userAgent, setUserAgent] = useState(initial?.config.userAgent ?? "");
   const [text, setText] = useState(initial ? sourcesToText(initial.config.sources) : "");
   const [mode, setMode] = useState<Mode>(initial?.mode ?? "provider");
   const [template, setTemplate] = useState<TemplateId>(initial?.config.template ?? "standard");
@@ -111,7 +122,7 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
 
   const runPreview = () => {
     if (sources.length === 0) return;
-    previewMutation.mutate({ mode, sources }, { onSuccess: setPreview, onError: (e) => toast.error(e.message) });
+    previewMutation.mutate({ mode, sources, userAgent: userAgent.trim() || undefined }, { onSuccess: setPreview, onError: (e) => toast.error(e.message) });
   };
 
   const submit = () => {
@@ -119,12 +130,14 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
     if (sources.length > 20) return toast.error("最多支持 20 个订阅链接");
     const input: SubscriptionInput = {
       name: name.trim() || (urlCount > 0 ? sourceLabel(sources[0]) : "我的订阅"),
+      note: note.trim(),
       mode,
       autoUpdateInterval: mode === "snapshot" && interval !== "off" ? Number(interval) : null,
       config: {
         sources,
         template,
         ...(templateId ? { templateId } : customGroups ? { enabledGroups: customGroups } : {}),
+        ...(userAgent.trim() ? { userAgent: userAgent.trim() } : {}),
       },
     };
     save.mutate(
@@ -155,6 +168,17 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
                 value={name}
                 maxLength={80}
                 onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sf-note">备注</Label>
+              <Textarea
+                id="sf-note"
+                placeholder="可选，例如续费日期、套餐、用途"
+                value={note}
+                maxLength={500}
+                onChange={(e) => setNote(e.target.value)}
+                className="min-h-16 rounded-2xl"
               />
             </div>
             <div className="space-y-2">
@@ -221,6 +245,32 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+          {urlCount > 0 && (
+            <div className="mt-5 space-y-2">
+              <Label htmlFor="sf-ua">抓取 User-Agent</Label>
+              <Input
+                id="sf-ua"
+                list="sf-ua-presets"
+                placeholder={`默认 ${USER_AGENT_PRESETS[0]}`}
+                value={userAgent}
+                maxLength={200}
+                onChange={(e) => {
+                  setUserAgent(e.target.value);
+                  setPreview(null);
+                }}
+                className="font-mono text-xs"
+                spellCheck={false}
+              />
+              <datalist id="sf-ua-presets">
+                {USER_AGENT_PRESETS.map((ua) => (
+                  <option key={ua} value={ua} />
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                Cloudflare 抓取机场订阅时使用。部分机场按 User-Agent 返回不同内容或屏蔽未知客户端；客户端拉取模式下由你的客户端自行访问，不受此项影响。
+              </p>
             </div>
           )}
         </Panel>

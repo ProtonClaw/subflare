@@ -24,6 +24,8 @@ export type SubscriptionConfig = {
   /** Custom template reference; when set, `template` and `enabledGroups` are ignored. */
   templateId?: string;
   deletedNodes?: DeletedNode[];
+  /** User-Agent for fetching URL sources; defaults to a Clash client UA. */
+  userAgent?: string;
 };
 
 export type SubscriptionMode = "provider" | "snapshot";
@@ -31,6 +33,7 @@ export type SubscriptionMode = "provider" | "snapshot";
 export type Subscription = {
   id: string;
   name: string;
+  note: string;
   token: string;
   mode: SubscriptionMode;
   config: SubscriptionConfig;
@@ -52,7 +55,7 @@ export type SubscriptionSummary = Omit<Subscription, "nodes" | "config"> & {
   sourceCount: number;
 };
 
-export type NewSubscription = Pick<Subscription, "name" | "mode" | "config" | "autoUpdateInterval">;
+export type NewSubscription = Pick<Subscription, "name" | "note" | "mode" | "config" | "autoUpdateInterval">;
 
 export type RefreshResult = Pick<Subscription, "nodes" | "userinfo" | "lastError">;
 
@@ -170,6 +173,7 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
           id: input.id,
           token: input.token,
           name: input.name,
+          note: input.note,
           mode: input.mode,
           config: JSON.stringify(input.config),
           templateId: input.config.templateId ?? null,
@@ -188,6 +192,7 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
         .update(subscriptions)
         .set({
           name: input.name,
+          note: input.note,
           mode: input.mode,
           config: JSON.stringify(input.config),
           templateId: input.config.templateId ?? null,

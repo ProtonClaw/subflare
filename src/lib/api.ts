@@ -18,6 +18,7 @@ export type TemplateSummary = InferResponseType<typeof api.templates.$get, 200>[
 export type TemplateDetail = InferResponseType<(typeof api.templates)[":id"]["$get"], 200>;
 export type TemplateConfig = Meta["templateDefaults"]["minimal"];
 export type TemplateInput = InferRequestType<typeof api.templates.$post>["json"];
+export type BackupFile = InferRequestType<typeof api.backup.$post>["json"];
 
 export class ApiError extends Error {
   constructor(

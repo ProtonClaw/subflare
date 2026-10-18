@@ -55,7 +55,10 @@ export async function getCachedYaml(env: Env, sub: Subscription): Promise<string
   const cached = await env.KV.get(cacheKey(sub.token));
   if (cached !== null) return cached;
   const yaml = renderYaml(sub, await loadTemplateConfig(env.DB, sub));
-  if (yaml !== null) await env.KV.put(cacheKey(sub.token), yaml);
+  if (yaml !== null) {
+    // Free plan caps KV writes per day; a failed cache write must not fail the pull.
+    await env.KV.put(cacheKey(sub.token), yaml).catch((error: unknown) => console.warn("yaml cache put failed", error));
+  }
   return yaml;
 }
 

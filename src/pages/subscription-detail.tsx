@@ -139,6 +139,7 @@ function Detail({ sub, now }: { sub: SubscriptionDetail; now: number }) {
             <Badge variant="outline" className="rounded-full">
               {templateName(sub.config.template, sub.config.templateId)}
             </Badge>
+            {sub.note && <span className="whitespace-pre-line">{sub.note}</span>}
           </span>
         }
         actions={
@@ -444,6 +445,11 @@ function SourcesPanel({ sub }: { sub: SubscriptionDetail }) {
           </li>
         ))}
       </ul>
+      {sub.config.userAgent && (
+        <p className="mt-3 truncate text-xs text-muted-foreground" title={sub.config.userAgent}>
+          抓取 User-Agent：<span className="font-mono">{sub.config.userAgent}</span>
+        </p>
+      )}
     </Panel>
   );
 }

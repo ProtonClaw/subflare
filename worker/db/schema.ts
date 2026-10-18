@@ -9,6 +9,7 @@ export const settings = sqliteTable("settings", {
 export const subscriptions = sqliteTable("subscriptions", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  note: text("note").notNull().default(""),
   token: text("token").notNull().unique(),
   mode: text("mode", { enum: ["provider", "snapshot"] }).notNull(),
   config: text("config").notNull(),

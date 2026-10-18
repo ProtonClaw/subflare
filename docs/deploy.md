@@ -286,7 +286,9 @@ docker compose up -d --build
 
 ### 备份与恢复
 
-数据保存在 Docker 数据卷 `subflare_subflare-data` 中（`docker compose down` 不会删除它；`docker compose down -v` **会删除**）。
+最简单的方式是在控制台 **设置 → 备份与恢复** 导出 / 导入 JSON 备份（包含全部订阅和模板，不含拉取记录），Cloudflare 版和 Docker 版之间也可以互相迁移，订阅链接保持不变。
+
+如果要连拉取记录一起完整备份，可以直接复制数据库文件。数据保存在 Docker 数据卷 `subflare_subflare-data` 中（`docker compose down` 不会删除它；`docker compose down -v` **会删除**）。
 
 ```bash
 # 备份：先停止，避免复制到写了一半的数据

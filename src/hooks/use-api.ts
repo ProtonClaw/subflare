@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   api,
   unwrap,
+  type BackupFile,
   type Meta,
   type NodeEdits,
   type NodeState,
@@ -102,7 +103,9 @@ export function useSubscription(id: string | null) {
 
 export function usePreview() {
   return useMutation({
-    mutationFn: (json: Pick<SubscriptionInput, "mode"> & { sources: SubscriptionInput["config"]["sources"] }) =>
+    mutationFn: (
+      json: Pick<SubscriptionInput, "mode"> & Pick<SubscriptionInput["config"], "sources" | "userAgent">
+    ) =>
       unwrap<PreviewResult>(api.preview.$post({ json })),
   });
 }
@@ -210,6 +213,15 @@ export function useSaveTemplate() {
         id ? api.templates[":id"].$put({ param: { id }, json: input }) : api.templates.$post({ json: input })
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.templates }),
+  });
+}
+
+export function useImportBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (json: BackupFile) =>
+      unwrap<{ templates: number; subscriptions: number }>(api.backup.$post({ json })),
+    onSuccess: () => qc.invalidateQueries(),
   });
 }
 

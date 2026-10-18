@@ -10,7 +10,7 @@ import type { Source, SubscriptionMode } from "../db/repo";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_BYTES = 10 * 1024 * 1024;
-const USER_AGENT = "clash-verge/v2.2.3";
+export const DEFAULT_USER_AGENT = "clash-verge/v2.2.3";
 
 export type SourceReport = {
   id: string;
@@ -42,11 +42,11 @@ export function normalizeSourceUrl(content: string): string | null {
   }
 }
 
-async function fetchText(url: string): Promise<FetchedText> {
+async function fetchText(url: string, userAgent: string): Promise<FetchedText> {
   let response: Response;
   try {
     response = await fetch(url, {
-      headers: { "user-agent": USER_AGENT, accept: "text/plain, application/yaml, */*;q=0.8" },
+      headers: { "user-agent": userAgent, accept: "text/plain, application/yaml, */*;q=0.8" },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (error) {
@@ -75,7 +75,7 @@ async function fetchText(url: string): Promise<FetchedText> {
  */
 export async function collectNodes(
   sources: Source[],
-  options: { mode: SubscriptionMode; fetchRemote: boolean }
+  options: { mode: SubscriptionMode; fetchRemote: boolean; userAgent?: string }
 ): Promise<CollectedNodes> {
   let userinfo: SubscriptionUserInfo | null = null;
 
@@ -92,7 +92,7 @@ export async function collectNodes(
       if (!url) return { report: { ...base, nodeCount: 0, fetched: false, error: "无效的订阅 URL" }, nodes: [] };
       if (!options.fetchRemote) return { report: { ...base, nodeCount: 0, fetched: false }, nodes: [] };
 
-      const fetched = await fetchText(url);
+      const fetched = await fetchText(url, options.userAgent || DEFAULT_USER_AGENT);
       if (!fetched.ok) return { report: { ...base, nodeCount: 0, fetched: true, error: fetched.error }, nodes: [] };
       if (fetched.userinfo && !userinfo) userinfo = fetched.userinfo;
 

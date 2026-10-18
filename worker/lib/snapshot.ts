@@ -34,6 +34,7 @@ export async function buildSnapshot(input: SnapshotInput, previous?: Subscriptio
   const collected = await collectNodes(input.config.sources, {
     mode: input.mode,
     fetchRemote: input.mode === "snapshot",
+    userAgent: input.config.userAgent,
   });
   const lastError = summarizeErrors(collected.sources);
 
