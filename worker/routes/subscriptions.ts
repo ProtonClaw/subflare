@@ -89,11 +89,17 @@ export const subscriptionRoutes = base
       userinfo: collected.userinfo,
     });
   })
-  .get("/stats/pulls", validate("query", z.object({ days: z.coerce.number().int().min(1).max(30).default(7) })), async (c) => {
-    const { days } = c.req.valid("query");
+  .get("/stats/pulls", validate(
+    "query",
+    z.object({
+      days: z.coerce.number().int().min(1).max(30).default(7),
+      subscriptionId: z.string().min(1).max(64).optional(),
+    })
+  ), async (c) => {
+    const { days, subscriptionId } = c.req.valid("query");
     const now = Date.now();
     const dayKeys = Array.from({ length: days }, (_, i) => utcDay(now - (days - 1 - i) * 86_400_000));
-    const rows = await createD1SubscriptionRepository(c.env.DB).listPullStats(dayKeys[0]);
+    const rows = await createD1SubscriptionRepository(c.env.DB).listPullStats(dayKeys[0], subscriptionId);
 
     const perDay = new Map(dayKeys.map((d) => [d, 0]));
     const perClient = new Map<string, number>();

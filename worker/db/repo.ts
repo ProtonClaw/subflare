@@ -62,7 +62,7 @@ export interface SubscriptionRepository {
   delete(id: string): Promise<Subscription | null>;
   listDueForRefresh(now: number, limit: number): Promise<Subscription[]>;
   recordPull(id: string, client: string, now: number): Promise<void>;
-  listPullStats(sinceDay: string): Promise<PullStatRow[]>;
+  listPullStats(sinceDay: string, subscriptionId?: string): Promise<PullStatRow[]>;
   prunePullStats(beforeDay: string): Promise<void>;
 }
 
@@ -209,8 +209,12 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
         db.update(subscriptions).set({ lastPulledAt: now, lastClient: client }).where(eq(subscriptions.id, id)),
       ]);
     },
-    async listPullStats(sinceDay) {
-      return db.select().from(pullStats).where(gte(pullStats.day, sinceDay)).all();
+    async listPullStats(sinceDay, subscriptionId) {
+      return db
+        .select()
+        .from(pullStats)
+        .where(and(gte(pullStats.day, sinceDay), subscriptionId ? eq(pullStats.subscriptionId, subscriptionId) : undefined))
+        .all();
     },
     async prunePullStats(beforeDay) {
       await db.delete(pullStats).where(lt(pullStats.day, beforeDay)).run();

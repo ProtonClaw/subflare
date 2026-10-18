@@ -1,7 +1,13 @@
 import { Loader2Icon } from "lucide-react";
-import { Dashboard } from "@/components/dashboard";
+import { Redirect, Route, Switch } from "wouter";
+import { AppShell } from "@/components/app-shell";
 import { LoginScreen } from "@/components/login";
 import { useMe } from "@/hooks/use-api";
+import { DashboardPage } from "@/pages/dashboard";
+import { SettingsPage } from "@/pages/settings";
+import { SubscriptionDetailPage } from "@/pages/subscription-detail";
+import { SubscriptionEditPage } from "@/pages/subscription-edit";
+import { SubscriptionsPage } from "@/pages/subscriptions";
 
 export default function App() {
   const me = useMe();
@@ -14,11 +20,23 @@ export default function App() {
     );
   }
   if (me.isError) {
-    return (
-      <div className="grid min-h-svh place-items-center p-6 text-sm text-destructive">
-        无法连接服务：{me.error.message}
-      </div>
-    );
+    return <div className="grid min-h-svh place-items-center p-6 text-sm text-destructive">无法连接服务：{me.error.message}</div>;
   }
-  return me.data.authenticated ? <Dashboard /> : <LoginScreen configured={me.data.configured} />;
+  if (!me.data.authenticated) return <LoginScreen configured={me.data.configured} />;
+
+  return (
+    <AppShell>
+      <Switch>
+        <Route path="/" component={DashboardPage} />
+        <Route path="/subscriptions" component={SubscriptionsPage} />
+        <Route path="/subscriptions/new">{() => <SubscriptionEditPage />}</Route>
+        <Route path="/subscriptions/:id/edit">{(p) => <SubscriptionEditPage id={p.id} />}</Route>
+        <Route path="/subscriptions/:id">{(p) => <SubscriptionDetailPage id={p.id} />}</Route>
+        <Route path="/settings" component={SettingsPage} />
+        <Route>
+          <Redirect to="/" />
+        </Route>
+      </Switch>
+    </AppShell>
+  );
 }

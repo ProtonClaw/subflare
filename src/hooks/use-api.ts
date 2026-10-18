@@ -54,10 +54,14 @@ export function useSubscriptions() {
   });
 }
 
-export function usePullStats() {
+export function usePullStats({ days, subscriptionId }: { days: number; subscriptionId?: string }) {
   return useQuery({
-    queryKey: keys.pulls,
-    queryFn: () => unwrap<PullStats>(api.stats.pulls.$get({ query: { days: "7" } })),
+    queryKey: [...keys.pulls, days, subscriptionId ?? "all"],
+    queryFn: () =>
+      unwrap<PullStats>(
+        api.stats.pulls.$get({ query: { days: String(days), ...(subscriptionId ? { subscriptionId } : {}) } })
+      ),
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[3] === (subscriptionId ?? "all") ? prev : undefined),
     refetchInterval: 60_000,
   });
 }
