@@ -61,7 +61,7 @@ function Overview({ subs, now }: { subs: SubscriptionSummary[]; now: number }) {
     let total = 0;
     for (const s of subs) {
       const u = usageOf(s.userinfo);
-      if (u) {
+      if (u?.total) {
         used += u.used;
         total += u.total;
       }

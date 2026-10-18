@@ -277,8 +277,10 @@ function StatsRow({ sub, now }: { sub: SubscriptionDetail; now: number }) {
       </Panel>
       <Panel>
         <PanelTitle icon={GaugeIcon} title="剩余流量" />
-        <BigNumber>{usage ? formatBytes(Math.max(0, usage.total - usage.used)) : "—"}</BigNumber>
-        {usage ? (
+        <BigNumber>{!usage ? "—" : usage.total === null ? "不限量" : formatBytes(Math.max(0, usage.total - usage.used))}</BigNumber>
+        {usage?.total === null ? (
+          <p className="mt-3 text-xs text-muted-foreground">已用 {formatBytes(usage.used)}</p>
+        ) : usage ? (
           <div className="mt-3 space-y-2">
             <ProgressBar value={usage.ratio} />
             <p className="text-xs text-muted-foreground">
@@ -292,9 +294,11 @@ function StatsRow({ sub, now }: { sub: SubscriptionDetail; now: number }) {
       <Panel>
         <PanelTitle icon={CalendarClockIcon} title="到期" />
         <BigNumber className={cn(days !== null && days <= EXPIRY_WARN_DAYS && "text-warning", days !== null && days <= 0 && "text-destructive")}>
-          {days === null ? "—" : days <= 0 ? "已到期" : `${days} 天`}
+          {days !== null ? (days <= 0 ? "已到期" : `${days} 天`) : sub.userinfo ? "长期有效" : "—"}
         </BigNumber>
-        <p className="mt-3 text-xs text-muted-foreground">{sub.userinfo?.expire ? formatDate(sub.userinfo.expire) : noInfo}</p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {sub.userinfo?.expire ? formatDate(sub.userinfo.expire) : sub.userinfo ? "机场未设置到期时间" : noInfo}
+        </p>
       </Panel>
     </div>
   );

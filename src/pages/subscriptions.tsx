@@ -25,7 +25,8 @@ function sortValue(sub: SubscriptionSummary, key: SortKey, now: number): string 
       return sub.nodeCount;
     case "remaining": {
       const usage = usageOf(sub.userinfo);
-      return usage ? usage.total - usage.used : -1;
+      if (!usage) return -1;
+      return usage.total === null ? Number.MAX_SAFE_INTEGER : usage.total - usage.used;
     }
     case "pulled":
       return sub.lastPulledAt ?? 0;
@@ -157,7 +158,7 @@ function SubscriptionTable({ subs, now }: { subs: SubscriptionSummary[]; now: nu
                   {sub.mode === "provider" && sub.nodeCount === 0 ? "—" : sub.nodeCount}
                 </Cell>
                 <Cell className="hidden text-right tabular-nums lg:table-cell">
-                  {usage ? formatBytes(Math.max(0, usage.total - usage.used)) : "—"}
+                  {!usage ? "—" : usage.total === null ? "不限量" : formatBytes(Math.max(0, usage.total - usage.used))}
                 </Cell>
                 <Cell className="hidden lg:table-cell">
                   {sub.lastPulledAt ? (

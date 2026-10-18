@@ -7,9 +7,13 @@ export const USAGE_WARN = 0.9;
 
 type UserInfo = SubscriptionSummary["userinfo"];
 
-export function usageOf(info: UserInfo) {
-  if (!info?.total) return null;
+type Usage = { used: number; total: number; ratio: number } | { used: number; total: null; ratio: null };
+
+/** `total: null` means unlimited (`total=0` in subscription-userinfo). */
+export function usageOf(info: UserInfo): Usage | null {
+  if (info?.total === undefined) return null;
   const used = (info.upload ?? 0) + (info.download ?? 0);
+  if (info.total === 0) return { used, total: null, ratio: null };
   return { used, total: info.total, ratio: Math.min(1, used / info.total) };
 }
 
@@ -26,7 +30,7 @@ export function issuesOf(sub: SubscriptionSummary, now: number): Issue[] {
   if (days !== null && days <= 0) out.push({ tone: "error", text: "已到期" });
   else if (days !== null && days <= EXPIRY_WARN_DAYS) out.push({ tone: "warn", text: `${days} 天后到期` });
   const usage = usageOf(sub.userinfo);
-  if (usage && usage.ratio >= USAGE_WARN) out.push({ tone: "warn", text: `流量已用 ${Math.round(usage.ratio * 100)}%` });
+  if (usage?.ratio != null && usage.ratio >= USAGE_WARN) out.push({ tone: "warn", text: `流量已用 ${Math.round(usage.ratio * 100)}%` });
   if (now - sub.createdAt > STALE_MS && (!sub.lastPulledAt || now - sub.lastPulledAt > STALE_MS)) {
     out.push({ tone: "warn", text: sub.lastPulledAt ? "3 天未被拉取" : "从未被客户端拉取" });
   }
