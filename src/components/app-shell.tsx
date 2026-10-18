@@ -1,4 +1,5 @@
 import {
+  ArrowUpRightIcon,
   ChevronsUpDownIcon,
   HistoryIcon,
   LayoutDashboardIcon,
@@ -25,6 +26,8 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useLogout, useSubscriptions } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+
+const SOURCE_URL = "https://github.com/ProtonClaw/subflare";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; match: (path: string) => boolean };
 
@@ -102,6 +105,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         ))}
       </nav>
+
+      <div className="flex items-center justify-between gap-2 px-5 pb-2 text-[11px] text-muted-foreground">
+        <span
+          className="truncate whitespace-nowrap tabular-nums"
+          title={`构建于 ${new Date(__BUILD_TIME__).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`}
+        >
+          {__BUILD_COMMIT__} · {new Date(__BUILD_TIME__).toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}
+        </span>
+        <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap hover:text-foreground">
+          源代码 <ArrowUpRightIcon className="size-3" />
+        </a>
+      </div>
 
       <div className="flex items-center gap-1 border-t p-3">
         <DropdownMenu>

@@ -1,14 +1,50 @@
-import { ChevronRightIcon, CopyIcon, PlusIcon, RssIcon } from "lucide-react";
-import { Link } from "wouter";
+import { ArrowDownIcon, ArrowUpIcon, CopyIcon, PlusIcon, RssIcon } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Link, useLocation } from "wouter";
 import { PageHeader, Panel, StatusDot } from "@/components/kit";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSubscriptions, useTemplateName } from "@/hooks/use-api";
 import { subscriptionUrl, type SubscriptionSummary } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
-import { formatRelative } from "@/lib/format";
-import { issuesOf } from "@/lib/insights";
+import { formatBytes, formatRelative } from "@/lib/format";
+import { issuesOf, usageOf } from "@/lib/insights";
 import { MODE_META } from "@/lib/modes";
+import { cn } from "@/lib/utils";
+
+type SortKey = "name" | "nodes" | "remaining" | "pulled" | "status";
+type Sort = { key: SortKey; dir: 1 | -1 } | null;
+
+const ISSUE_RANK = { error: 2, warn: 1 } as const;
+
+function sortValue(sub: SubscriptionSummary, key: SortKey, now: number): string | number {
+  switch (key) {
+    case "name":
+      return sub.name;
+    case "nodes":
+      return sub.nodeCount;
+    case "remaining": {
+      const usage = usageOf(sub.userinfo);
+      return usage ? usage.total - usage.used : -1;
+    }
+    case "pulled":
+      return sub.lastPulledAt ?? 0;
+    case "status": {
+      const issue = issuesOf(sub, now)[0];
+      return issue ? ISSUE_RANK[issue.tone] : 0;
+    }
+  }
+}
+
+function sortSubs(subs: SubscriptionSummary[], sort: Sort, now: number): SubscriptionSummary[] {
+  if (!sort) return subs;
+  return [...subs].sort((a, b) => {
+    const va = sortValue(a, sort.key, now);
+    const vb = sortValue(b, sort.key, now);
+    const cmp = typeof va === "string" ? va.localeCompare(vb as string, "zh-CN") : va - (vb as number);
+    return cmp * sort.dir;
+  });
+}
 
 export function SubscriptionsPage() {
   const subs = useSubscriptions();
@@ -29,7 +65,7 @@ export function SubscriptionsPage() {
       {subs.isPending ? (
         <Panel className="space-y-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 rounded-2xl" />
+            <Skeleton key={i} className="h-10 rounded-lg" />
           ))}
         </Panel>
       ) : subs.isError ? (
@@ -45,70 +81,124 @@ export function SubscriptionsPage() {
           </Button>
         </Panel>
       ) : (
-        <Panel className="p-2 sm:p-3">
-          <ul className="divide-y divide-border/70">
-            {subs.data.map((sub) => (
-              <Row key={sub.id} sub={sub} now={subs.dataUpdatedAt} />
-            ))}
-          </ul>
-        </Panel>
+        <SubscriptionTable subs={subs.data} now={subs.dataUpdatedAt} />
       )}
     </>
   );
 }
 
-function Row({ sub, now }: { sub: SubscriptionSummary; now: number }) {
-  const mode = MODE_META[sub.mode];
-  const issue = issuesOf(sub, now)[0];
+function SubscriptionTable({ subs, now }: { subs: SubscriptionSummary[]; now: number }) {
+  const [sort, setSort] = useState<Sort>(null);
+  const [, navigate] = useLocation();
   const templateName = useTemplateName();
+  const rows = sortSubs(subs, sort, now);
+
+  const toggle = (key: SortKey) =>
+    setSort((s) => {
+      const first = key === "name" ? 1 : -1;
+      if (s?.key !== key) return { key, dir: first };
+      return s.dir === first ? { key, dir: -first as 1 | -1 } : null;
+    });
+
+  const header = (key: SortKey, label: string, className?: string) => (
+    <th className={cn("px-4 py-2.5 font-medium", className)} aria-sort={sort?.key === key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}>
+      <button
+        type="button"
+        onClick={() => toggle(key)}
+        className={cn("inline-flex items-center gap-1 hover:text-foreground", sort?.key === key && "text-foreground")}
+      >
+        {label}
+        {sort?.key === key && (sort.dir === 1 ? <ArrowUpIcon className="size-3" /> : <ArrowDownIcon className="size-3" />)}
+      </button>
+    </th>
+  );
 
   return (
-    <li>
-      <Link
-        href={`/subscriptions/${sub.id}`}
-        className="group flex items-center gap-4 rounded-2xl px-3 py-4 transition-colors hover:bg-muted/60 sm:px-4"
-      >
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent text-accent-foreground">
-          <mode.icon className="size-4" />
-        </span>
-
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-medium">{sub.name}</div>
-          <div className="mt-0.5 truncate text-sm text-muted-foreground">
-            {mode.label} · {templateName(sub.template, sub.templateId)} · {sub.sourceCount} 个来源
-          </div>
-        </div>
-
-        <div className="hidden w-20 text-right md:block">
-          <div className="font-display text-lg tabular-nums">{sub.nodeCount}</div>
-          <div className="text-xs text-muted-foreground">节点</div>
-        </div>
-
-        <div className="hidden w-36 text-right lg:block">
-          <div className="text-sm">{sub.lastPulledAt ? formatRelative(sub.lastPulledAt) : "—"}</div>
-          <div className="truncate text-xs text-muted-foreground">{sub.lastClient ?? "尚未被拉取"}</div>
-        </div>
-
-        <div className="hidden w-32 items-center justify-end gap-2 text-sm sm:flex">
-          <StatusDot tone={issue ? issue.tone : "ok"} />
-          <span className={issue ? (issue.tone === "error" ? "text-destructive" : "text-warning") : "text-muted-foreground"}>
-            {issue ? issue.text : "正常"}
-          </span>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="复制订阅链接"
-          onClick={(e) => {
-            e.preventDefault();
-            copyText(subscriptionUrl(sub.token), "订阅链接已复制");
-          }}
-        >
-          <CopyIcon />
-        </Button>
-        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-      </Link>
-    </li>
+    <div className="overflow-hidden rounded-3xl border bg-card">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/60 text-left text-xs text-muted-foreground">
+          <tr className="border-b">
+            {header("name", "名称", "w-[34%]")}
+            <th className="hidden px-4 py-2.5 font-medium md:table-cell">模式</th>
+            {header("nodes", "节点", "hidden text-right sm:table-cell")}
+            {header("remaining", "剩余流量", "hidden text-right lg:table-cell")}
+            {header("pulled", "最近拉取", "hidden lg:table-cell")}
+            {header("status", "状态")}
+            <th className="w-12 px-2 py-2.5">
+              <span className="sr-only">操作</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {rows.map((sub) => {
+            const mode = MODE_META[sub.mode];
+            const issue = issuesOf(sub, now)[0];
+            const usage = usageOf(sub.userinfo);
+            return (
+              <tr
+                key={sub.id}
+                onClick={() => navigate(`/subscriptions/${sub.id}`)}
+                className="cursor-pointer transition-colors hover:bg-muted/50"
+              >
+                <td className="max-w-0 px-4 py-3">
+                  <Link href={`/subscriptions/${sub.id}`} className="block truncate font-medium" onClick={(e) => e.stopPropagation()}>
+                    {sub.name}
+                  </Link>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {templateName(sub.template, sub.templateId)} · {sub.sourceCount} 个来源
+                  </div>
+                </td>
+                <td className="hidden px-4 py-3 whitespace-nowrap md:table-cell">
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <mode.icon className="size-3.5" /> {mode.label}
+                  </span>
+                </td>
+                <Cell className="hidden text-right tabular-nums sm:table-cell">
+                  {sub.mode === "provider" && sub.nodeCount === 0 ? "—" : sub.nodeCount}
+                </Cell>
+                <Cell className="hidden text-right tabular-nums lg:table-cell">
+                  {usage ? formatBytes(Math.max(0, usage.total - usage.used)) : "—"}
+                </Cell>
+                <Cell className="hidden lg:table-cell">
+                  {sub.lastPulledAt ? (
+                    <>
+                      {formatRelative(sub.lastPulledAt)}
+                      <span className="text-muted-foreground"> · {sub.lastClient}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">尚未被拉取</span>
+                  )}
+                </Cell>
+                <Cell>
+                  <span className="inline-flex items-center gap-2">
+                    <StatusDot tone={issue ? issue.tone : "ok"} />
+                    <span className={issue ? (issue.tone === "error" ? "text-destructive" : "text-warning") : "text-muted-foreground"}>
+                      {issue ? issue.text : "正常"}
+                    </span>
+                  </span>
+                </Cell>
+                <td className="px-2 py-3 text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="复制订阅链接"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyText(subscriptionUrl(sub.token), "订阅链接已复制");
+                    }}
+                  >
+                    <CopyIcon />
+                  </Button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
+}
+
+function Cell({ className, children }: { className?: string; children: ReactNode }) {
+  return <td className={cn("px-4 py-3 whitespace-nowrap", className)}>{children}</td>;
 }

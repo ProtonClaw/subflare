@@ -9,6 +9,7 @@ import { getNodeSourceIds } from "@subboost/core/subscription/node-source-state"
 import {
   createD1SubscriptionRepository,
   statsDay,
+  statsDayStart,
   type DeletedNode,
   type NewSubscription,
   type Source,
@@ -134,7 +135,11 @@ export const subscriptionRoutes = base
     const { days, subscriptionId } = c.req.valid("query");
     const now = Date.now();
     const dayKeys = Array.from({ length: days }, (_, i) => statsDay(now - (days - 1 - i) * 86_400_000));
-    const rows = await createD1SubscriptionRepository(c.env.DB).listPullStats(dayKeys[0], subscriptionId);
+    const repo = createD1SubscriptionRepository(c.env.DB);
+    const [rows, uniqueIpsToday] = await Promise.all([
+      repo.listPullStats(dayKeys[0], subscriptionId),
+      repo.countPullIps(statsDayStart(now), subscriptionId),
+    ]);
 
     const perDay = new Map(dayKeys.map((d) => [d, 0]));
     const perClient = new Map<string, number>();
@@ -149,6 +154,7 @@ export const subscriptionRoutes = base
       days: dayKeys.map((day) => ({ day, count: perDay.get(day) ?? 0 })),
       clients: [...perClient].map(([client, count]) => ({ client, count })).sort((a, b) => b.count - a.count),
       perSubscription,
+      uniqueIpsToday,
     });
   })
   .get("/stats/pull-logs", validate("query", PullLogQuerySchema), async (c) => {

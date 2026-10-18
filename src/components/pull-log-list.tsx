@@ -5,36 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePullLogs } from "@/hooks/use-api";
-import type { PullLog, PullLogFilters } from "@/lib/api";
+import type { PullLogFilters } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
+import { describeLocation } from "@/lib/pull-log";
 
 type Status = NonNullable<PullLogFilters["status"]>;
 
 const STATUS_LABEL: Record<Status, string> = { ok: "成功", empty: "无可用节点", revoked: "旧链接" };
-
-const regionNames = new Intl.DisplayNames("zh-CN", { type: "region" });
-
-function flagEmoji(country: string): string {
-  if (!/^[A-Z]{2}$/.test(country)) return "";
-  return String.fromCodePoint(...[...country].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
-}
-
-function countryName(country: string): string {
-  try {
-    return regionNames.of(country) ?? country;
-  } catch {
-    return country;
-  }
-}
-
-function location(log: PullLog): string | null {
-  const parts = [
-    log.country && `${flagEmoji(log.country)} ${countryName(log.country)}`.trim(),
-    log.region,
-    log.city !== log.region ? log.city : null,
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : null;
-}
 
 export function PullLogList({
   subscriptionId,
@@ -119,7 +96,7 @@ export function PullLogList({
                 ) : (
                   <span>IP 未知</span>
                 )}
-                {location(log) && <span>{location(log)}</span>}
+                {describeLocation(log) && <span>{describeLocation(log)}</span>}
                 {log.asOrg && (
                   <span>
                     {log.asOrg}

@@ -91,6 +91,7 @@ export interface SubscriptionRepository {
   /** Logs a pull made with a rotated-out token; returns false when the token was never ours. */
   recordRetiredTokenPull(token: string, entry: PullLogEntry, now: number): Promise<boolean>;
   listPullLogs(query: PullLogQuery): Promise<PullLog[]>;
+  countPullIps(since: number, subscriptionId?: string): Promise<number>;
   prunePullLogs(before: number): Promise<void>;
   listPullStats(sinceDay: string, subscriptionId?: string): Promise<PullStatRow[]>;
   prunePullStats(beforeDay: string): Promise<void>;
@@ -101,6 +102,11 @@ const STATS_TZ_OFFSET_MS = 8 * 3600_000;
 /** Pull-stat day bucket in Beijing time (UTC+8), YYYY-MM-DD. */
 export function statsDay(ms: number): string {
   return new Date(ms + STATS_TZ_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/** Start of the Beijing-time day containing `ms`. */
+export function statsDayStart(ms: number): number {
+  return Date.parse(`${statsDay(ms)}T00:00:00+08:00`);
 }
 
 type Row = typeof subscriptions.$inferSelect;
@@ -292,6 +298,14 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
         .limit(limit)
         .all();
       return rows.map(({ log, subscriptionName }) => ({ ...log, subscriptionName }));
+    },
+    async countPullIps(since, subscriptionId) {
+      const row = await db
+        .select({ count: sql<number>`count(distinct ${pullLogs.ip})` })
+        .from(pullLogs)
+        .where(and(gte(pullLogs.at, since), subscriptionId ? eq(pullLogs.subscriptionId, subscriptionId) : undefined))
+        .get();
+      return row?.count ?? 0;
     },
     async prunePullLogs(before) {
       await db.batch([

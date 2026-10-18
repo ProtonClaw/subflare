@@ -11,15 +11,15 @@ import {
   LayersIcon,
   LinkIcon,
   Loader2Icon,
-  MoreHorizontalIcon,
   PartyPopperIcon,
   PencilIcon,
   RefreshCwIcon,
   RotateCcwKeyIcon,
   ServerIcon,
+  SettingsIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { renderSVG } from "uqr";
 import { Link, useLocation, useSearch } from "wouter";
@@ -37,14 +37,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useDeleteSubscription,
   usePullStats,
@@ -62,6 +56,9 @@ import { sourceLabel } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 
 const NODE_PREVIEW = 30;
+
+const TABS = ["overview", "nodes", "pulls", "settings"] as const;
+type Tab = (typeof TABS)[number];
 
 const BackLink = () => (
   <Link href="/subscriptions" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
@@ -94,7 +91,9 @@ export function SubscriptionDetailPage({ id }: { id: string }) {
 
 function Detail({ sub, now }: { sub: SubscriptionDetail; now: number }) {
   const [, navigate] = useLocation();
-  const justCreated = new URLSearchParams(useSearch()).has("created");
+  const search = new URLSearchParams(useSearch());
+  const justCreated = search.has("created");
+  const tab = TABS.includes(search.get("tab") as Tab) ? (search.get("tab") as Tab) : "overview";
   const [confirm, setConfirm] = useState<"delete" | "rotate" | null>(null);
   const refresh = useRefreshSubscription();
   const rotate = useRotateToken();
@@ -153,42 +152,42 @@ function Detail({ sub, now }: { sub: SubscriptionDetail; now: number }) {
                 <PencilIcon /> 编辑
               </Link>
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="更多操作">
-                  <MoreHorizontalIcon />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setConfirm("rotate")}>
-                  <RotateCcwKeyIcon /> 重置链接
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onSelect={() => setConfirm("delete")}>
-                  <Trash2Icon /> 删除订阅
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </>
         }
       />
 
-      <div className="space-y-5">
-        <LinkPanel sub={sub} highlight={justCreated} />
-        <StatsRow sub={sub} now={now} />
-        <div className="grid gap-5 xl:grid-cols-3">
-          <PullsPanel sub={sub} />
-          <StatusPanel sub={sub} />
-        </div>
-        <div className="grid gap-5 xl:grid-cols-2">
-          <SourcesPanel sub={sub} />
+      <Tabs value={tab} onValueChange={(v) => navigate(`/subscriptions/${sub.id}?tab=${v}`, { replace: true })} className="gap-5">
+        <TabsList variant="line" className="w-full justify-start border-b pb-1">
+          <TabsTrigger value="overview" className="flex-none px-3 after:bg-primary">概览</TabsTrigger>
+          <TabsTrigger value="nodes" className="flex-none px-3 after:bg-primary">
+            节点 <span className="text-xs text-muted-foreground tabular-nums">{sub.nodeCount}</span>
+          </TabsTrigger>
+          <TabsTrigger value="pulls" className="flex-none px-3 after:bg-primary">拉取记录</TabsTrigger>
+          <TabsTrigger value="settings" className="flex-none px-3 after:bg-primary">设置</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview" className="space-y-5">
+          <LinkPanel sub={sub} highlight={justCreated} />
+          <StatsRow sub={sub} now={now} />
+          <div className="grid gap-5 xl:grid-cols-3">
+            <PullsPanel sub={sub} />
+            <StatusPanel sub={sub} />
+          </div>
+        </TabsContent>
+        <TabsContent value="nodes">
           <NodesPanel sub={sub} />
-        </div>
-        <Panel>
-          <PanelTitle icon={HistoryIcon} title="拉取记录" description="每次拉取的时间、IP、地区和客户端，保留 90 天。" />
-          <PullLogList subscriptionId={sub.id} />
-        </Panel>
-      </div>
+        </TabsContent>
+        <TabsContent value="pulls">
+          <Panel>
+            <PanelTitle icon={HistoryIcon} title="拉取记录" description="每次拉取的时间、IP、地区和客户端，保留 90 天。" />
+            <PullLogList subscriptionId={sub.id} />
+          </Panel>
+        </TabsContent>
+        <TabsContent value="settings" className="space-y-5">
+          <SourcesPanel sub={sub} />
+          <ConfigPanel sub={sub} />
+          <DangerPanel onRotate={() => setConfirm("rotate")} onDelete={() => setConfirm("delete")} />
+        </TabsContent>
+      </Tabs>
 
       <AlertDialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
         <AlertDialogContent>
@@ -356,6 +355,73 @@ function StatusPanel({ sub }: { sub: SubscriptionDetail }) {
           <span className="break-all">{sub.lastError}</span>
         </div>
       )}
+    </Panel>
+  );
+}
+
+function ConfigPanel({ sub }: { sub: SubscriptionDetail }) {
+  const templateName = useTemplateName();
+  const templateHref = sub.config.templateId ? `/templates/${sub.config.templateId}` : `/templates/builtin/${sub.config.template}`;
+  const rows: Array<[string, ReactNode]> = [
+    ["模式", MODE_META[sub.mode].label],
+    [
+      "模板",
+      <Link key="template" href={templateHref} className="hover:underline">
+        {templateName(sub.config.template, sub.config.templateId)}
+      </Link>,
+    ],
+    ["自动更新", sub.mode === "snapshot" ? intervalLabel(sub.autoUpdateInterval) : "由客户端决定"],
+    ["创建于", new Date(sub.createdAt).toLocaleDateString("zh-CN")],
+  ];
+  return (
+    <Panel>
+      <PanelTitle
+        icon={SettingsIcon}
+        title="配置"
+        action={
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/subscriptions/${sub.id}/edit`}>
+              <PencilIcon /> 编辑
+            </Link>
+          </Button>
+        }
+      />
+      <dl className="grid grid-cols-[6rem_1fr] gap-x-4 gap-y-3 text-sm">
+        {rows.map(([k, v]) => (
+          <Fragment key={k}>
+            <dt className="text-muted-foreground">{k}</dt>
+            <dd className="min-w-0 truncate">{v}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </Panel>
+  );
+}
+
+function DangerPanel({ onRotate, onDelete }: { onRotate: () => void; onDelete: () => void }) {
+  return (
+    <Panel>
+      <PanelTitle icon={AlertTriangleIcon} title="危险操作" />
+      <div className="divide-y">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
+          <div>
+            <div className="text-sm font-medium">重置订阅链接</div>
+            <div className="text-xs text-muted-foreground">链接泄露时使用。旧链接立即失效，所有客户端需要换成新链接。</div>
+          </div>
+          <Button variant="outline" onClick={onRotate}>
+            <RotateCcwKeyIcon /> 重置链接
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4">
+          <div>
+            <div className="text-sm font-medium">删除订阅</div>
+            <div className="text-xs text-muted-foreground">链接和拉取记录一并删除，无法撤销。</div>
+          </div>
+          <Button variant="outline" className="text-destructive hover:text-destructive" onClick={onDelete}>
+            <Trash2Icon /> 删除订阅
+          </Button>
+        </div>
+      </div>
     </Panel>
   );
 }

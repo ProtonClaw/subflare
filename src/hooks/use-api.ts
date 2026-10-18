@@ -65,12 +65,14 @@ export function useSubscriptions() {
   });
 }
 
-export function usePullLogs(filters: PullLogFilters) {
+export function usePullLogs(filters: PullLogFilters, limit?: number) {
   return useInfiniteQuery({
-    queryKey: [...keys.pullLogs, filters],
+    queryKey: [...keys.pullLogs, filters, limit ?? "default"],
     queryFn: ({ pageParam }) =>
       unwrap<PullLogPage>(
-        api.stats["pull-logs"].$get({ query: { ...filters, ...(pageParam ? { before: String(pageParam) } : {}) } })
+        api.stats["pull-logs"].$get({
+          query: { ...filters, ...(limit ? { limit: String(limit) } : {}), ...(pageParam ? { before: String(pageParam) } : {}) },
+        })
       ),
     initialPageParam: null as number | null,
     getNextPageParam: (last) => last.nextBefore,

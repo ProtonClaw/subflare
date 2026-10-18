@@ -43,7 +43,7 @@ export function SubscriptionNodesPage({ id }: { id: string }) {
   const header = (
     <PageHeader
       back={
-        <Link href={`/subscriptions/${id}`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={`/subscriptions/${id}?tab=nodes`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeftIcon className="size-4" /> 返回订阅
         </Link>
       }
