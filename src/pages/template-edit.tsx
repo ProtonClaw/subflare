@@ -1,9 +1,11 @@
 import {
   ArrowLeftIcon,
+  BoxesIcon,
   FileTextIcon,
   LayoutTemplateIcon,
   ListTreeIcon,
   Loader2Icon,
+  PencilIcon,
   PlusIcon,
   ScrollTextIcon,
   SettingsIcon,
@@ -14,6 +16,7 @@ import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Link, useLocation, useSearch } from "wouter";
 import { GroupPicker } from "@/components/group-picker";
+import { CustomGroupDialog, GroupAdvancedDialog } from "@/components/group-settings";
 import { PageHeader, Panel, PanelTitle } from "@/components/kit";
 import {
   AlertDialog,
@@ -34,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useDeleteTemplate, useMeta, useSaveTemplate, useTemplate } from "@/hooks/use-api";
 import type { Meta, TemplateConfig, TemplateDetail } from "@/lib/api";
+import { describeFilters, GROUP_TYPE_LABEL, type CustomGroup, type GroupAdvanced } from "@/lib/group-settings";
 import { cn } from "@/lib/utils";
 
 type Base = TemplateConfig["template"];
@@ -65,9 +69,9 @@ function decodeTarget(value: string): Rule["target"] {
   return kind === "module" || kind === "custom" ? { kind, id: rest.join(":") } : value;
 }
 
-function isTargetValid(target: Rule["target"], enabled: string[]): boolean {
+function isTargetValid(target: Rule["target"], enabled: string[], customIds: string[]): boolean {
   if (typeof target === "string") return (LITERAL_TARGETS as readonly string[]).includes(target);
-  return target.kind === "module" && enabled.includes(target.id);
+  return target.kind === "module" ? enabled.includes(target.id) : customIds.includes(target.id);
 }
 
 export function TemplateEditPage({ id }: { id?: string }) {
@@ -138,6 +142,8 @@ function TemplateForm({
     () => structuredClone(initial?.config ?? meta.templateDefaults[initialBase]) as TemplateConfig
   );
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<CustomGroup | "new" | null>(null);
+  const [advancedModule, setAdvancedModule] = useState<string | null>(null);
   const save = useSaveTemplate();
   const remove = useDeleteTemplate();
 
@@ -145,6 +151,45 @@ function TemplateForm({
   const customYaml = config.dnsYaml.trim() !== "";
   const enabled = config.enabledProxyGroups;
   const moduleName = (moduleId: string) => meta.modules.find((m) => m.id === moduleId)?.name ?? moduleId;
+  const customGroups = config.customProxyGroups;
+  const customIds = customGroups.map((g) => g.id);
+  const advancedOf = (moduleId: string) => config.proxyGroupAdvanced?.[moduleId];
+
+  const saveCustomGroup = (group: CustomGroup) => {
+    setConfig((c) => {
+      const exists = c.customProxyGroups.some((g) => g.id === group.id);
+      return {
+        ...c,
+        customProxyGroups: exists ? c.customProxyGroups.map((g) => (g.id === group.id ? group : g)) : [...c.customProxyGroups, group],
+      };
+    });
+    setEditingGroup(null);
+  };
+  const removeCustomGroup = (group: CustomGroup) => {
+    const rules = config.customRules.filter((r) => !(typeof r.target === "object" && r.target.kind === "custom" && r.target.id === group.id));
+    update({ customProxyGroups: customGroups.filter((g) => g.id !== group.id), customRules: rules });
+    if (rules.length < config.customRules.length) toast.info(`已同时删除 ${config.customRules.length - rules.length} 条指向该分组的规则`);
+  };
+  const addRegionGroup = (region: Meta["regions"][number]) => {
+    const name = `${region.emoji} ${region.label}自动`;
+    if (customGroups.some((g) => g.name === name)) return toast.info(`「${name}」已存在`);
+    saveCustomGroup({
+      id: crypto.randomUUID().slice(0, 8),
+      name,
+      emoji: "",
+      groupType: "url-test",
+      memberSource: "filtered-nodes",
+      includeInGroupMembers: true,
+      advanced: { regions: [region.id as NonNullable<GroupAdvanced["regions"]>[number]] },
+    });
+  };
+  const saveAdvanced = (moduleId: string, value: GroupAdvanced) => {
+    const next = { ...config.proxyGroupAdvanced };
+    if (Object.keys(value).length === 0) delete next[moduleId];
+    else next[moduleId] = value;
+    update({ proxyGroupAdvanced: next });
+    setAdvancedModule(null);
+  };
 
   const setRule = (index: number, patch: Partial<Rule>) =>
     update({ customRules: config.customRules.map((r, i) => (i === index ? { ...r, ...patch } : r)) });
@@ -165,7 +210,7 @@ function TemplateForm({
   const submit = () => {
     if (!name.trim()) return toast.error("请填写模板名称");
     if (enabled.length === 0) return toast.error("至少启用一个分流组");
-    const badRule = config.customRules.findIndex((r) => !r.value.trim() || !isTargetValid(r.target, enabled));
+    const badRule = config.customRules.findIndex((r) => !r.value.trim() || !isTargetValid(r.target, enabled, customIds));
     if (badRule >= 0) return toast.error(`第 ${badRule + 1} 条自定义规则不完整，或目标分组未启用`);
     save.mutate(
       { id: initial?.id, input: { name: name.trim(), description: description.trim(), config } },
@@ -252,6 +297,77 @@ function TemplateForm({
             description={`已启用 ${enabled.length} 个。客户端里每个分流组对应一个可切换节点的策略组。`}
           />
           <GroupPicker meta={meta} value={enabled} onChange={(v) => update({ enabledProxyGroups: v })} />
+          <div className="mt-5 border-t pt-4">
+            <div className="mb-2.5 text-sm text-muted-foreground">点击分流组可以设置节点筛选（按地区、正则）和分组类型：</div>
+            <div className="flex flex-wrap gap-2">
+              {enabled.map((moduleId) => {
+                const summary = describeFilters(meta, advancedOf(moduleId));
+                const type = advancedOf(moduleId)?.groupType;
+                const configured = !!summary || !!type;
+                return (
+                  <button
+                    key={moduleId}
+                    type="button"
+                    onClick={() => setAdvancedModule(moduleId)}
+                    title={[type && GROUP_TYPE_LABEL[type], summary].filter(Boolean).join(" · ") || undefined}
+                    className={cn(
+                      "max-w-full truncate rounded-full border px-3 py-1 text-sm transition-colors",
+                      configured
+                        ? "border-primary bg-accent text-accent-foreground"
+                        : "border-transparent bg-muted/70 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {moduleName(moduleId)}
+                    {configured && <span className="ml-1.5 text-xs opacity-80">· {summary ?? GROUP_TYPE_LABEL[type!]}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </Panel>
+
+        <Panel>
+          <PanelTitle
+            icon={BoxesIcon}
+            title="自定义分组"
+            description="把筛选出的节点组成新的策略组，例如「🇯🇵 日本自动」，可作为规则目标或其他分流组的选项。"
+            action={
+              <Button variant="outline" size="sm" onClick={() => setEditingGroup("new")}>
+                <PlusIcon /> 添加分组
+              </Button>
+            }
+          />
+          {customGroups.length > 0 && (
+            <ul className="mb-4 space-y-2.5">
+              {customGroups.map((group) => (
+                <li key={group.id} className="flex items-center gap-3 rounded-2xl bg-muted/50 px-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">{group.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {GROUP_TYPE_LABEL[group.groupType]} · {describeFilters(meta, group.advanced) ?? "全部节点"}
+                      {group.includeInGroupMembers === false && " · 不出现在其他分组"}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" aria-label="编辑分组" onClick={() => setEditingGroup(group)}>
+                    <PencilIcon />
+                  </Button>
+                  <Button variant="ghost" size="icon" aria-label="删除分组" onClick={() => removeCustomGroup(group)}>
+                    <XIcon />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">快速添加地区自动测速组：</span>
+            {meta.regions
+              .filter((r) => r.id !== "other")
+              .map((r) => (
+                <Button key={r.id} variant="secondary" size="sm" className="rounded-full" onClick={() => addRegionGroup(r)}>
+                  {r.emoji} {r.label}
+                </Button>
+              ))}
+          </div>
         </Panel>
 
         <Panel>
@@ -273,7 +389,7 @@ function TemplateForm({
             <ul className="space-y-2.5">
               {config.customRules.map((rule, i) => {
                 const hint = RULE_TYPES.find((t) => t.value === rule.type)?.hint;
-                const targetOk = isTargetValid(rule.target, enabled);
+                const targetOk = isTargetValid(rule.target, enabled, customIds);
                 return (
                   <li key={rule.id ?? i} className="grid gap-2 rounded-2xl bg-muted/50 p-2.5 sm:grid-cols-[11.5rem_1fr_12rem_auto]">
                     <Select value={rule.type} onValueChange={(v) => setRule(i, { type: v as Rule["type"] })}>
@@ -303,6 +419,11 @@ function TemplateForm({
                         {enabled.map((g) => (
                           <SelectItem key={g} value={`module:${g}`}>
                             {moduleName(g)}
+                          </SelectItem>
+                        ))}
+                        {customGroups.map((g) => (
+                          <SelectItem key={g.id} value={`custom:${g.id}`}>
+                            {g.name}
                           </SelectItem>
                         ))}
                         {LITERAL_TARGETS.map((t) => (
@@ -390,6 +511,26 @@ function TemplateForm({
           </Button>
         </div>
       </div>
+
+      <CustomGroupDialog
+        meta={meta}
+        open={editingGroup !== null}
+        initial={editingGroup === "new" ? null : editingGroup}
+        takenNames={[
+          ...LITERAL_TARGETS,
+          ...meta.modules.map((m) => m.name),
+          ...customGroups.filter((g) => editingGroup === "new" || g.id !== editingGroup?.id).map((g) => g.name),
+        ]}
+        onOpenChange={(open) => !open && setEditingGroup(null)}
+        onSave={saveCustomGroup}
+      />
+      <GroupAdvancedDialog
+        meta={meta}
+        moduleId={advancedModule}
+        value={advancedModule ? advancedOf(advancedModule) : undefined}
+        onOpenChange={(open) => !open && setAdvancedModule(null)}
+        onSave={saveAdvanced}
+      />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

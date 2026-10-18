@@ -1,5 +1,6 @@
 import { DEFAULT_BASE_CONFIG_YAML, buildDefaultSubBoostTemplateConfig } from "@subboost/core/config/defaults";
 import { CATEGORY_INFO, PROXY_GROUP_MODULES, getModulesForTemplate } from "@subboost/core/generator/proxy-groups";
+import { REGION_PRESETS } from "@subboost/core/proxy-group-advanced";
 import { getTemplateList } from "@subboost/core/templates";
 import type { ParsedNode } from "@subboost/core/types/node";
 import { Hono } from "hono";
@@ -85,12 +86,13 @@ export const subscriptionRoutes = base
   .get("/meta", (c) =>
     c.json({
       templates: getTemplateList().map((t) => ({ ...t, groups: getModulesForTemplate(t.id) })),
-      modules: PROXY_GROUP_MODULES.map(({ id, name, emoji, category, description, rules }) => ({
+      modules: PROXY_GROUP_MODULES.map(({ id, name, emoji, category, description, groupType, rules }) => ({
         id,
         name,
         emoji,
         category,
         description,
+        groupType,
         ruleCount: rules.length,
       })),
       categories: CATEGORY_INFO,
@@ -100,6 +102,7 @@ export const subscriptionRoutes = base
         full: buildDefaultSubBoostTemplateConfig("full"),
       },
       baseConfigYaml: DEFAULT_BASE_CONFIG_YAML,
+      regions: REGION_PRESETS.map(({ id, label, emoji }) => ({ id, label, emoji })),
     })
   )
   .post("/preview", validate("json", PreviewSchema), async (c) => {

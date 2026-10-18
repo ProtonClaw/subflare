@@ -15,7 +15,7 @@ import type {
   ProxyGroupGroupType,
   RuleProvider,
 } from "@subboost/core/types/config";
-import { resolveProxyGroupMembers } from "@subboost/core/proxy-group-advanced";
+import { buildProviderFilterFields, resolveProxyGroupMembers } from "@subboost/core/proxy-group-advanced";
 import { isSubscriptionInfoNodeName } from "@subboost/core/subscription/info-node-name";
 
 import { PROXY_GROUP_MODULES, type ProxyGroupModule, type ProxyGroupRule } from "./proxy-group-modules";
@@ -476,6 +476,21 @@ export function generateProxyGroups(options: ProxyGroupGenerateOptions): ProxyGr
     for (const customGroup of inlineCustomProxyGroups) {
       groups.push(createCustomProxyGroup(customGroup));
     }
+  }
+
+  const advancedByGroupName = new Map<string, ProxyGroupAdvancedConfig | undefined>([
+    ...PROXY_GROUP_MODULES.map((module) => [moduleNames[module.id], proxyGroupAdvanced[module.id]] as const),
+    ...activeCustomProxyGroups.map((group) => [group.name, group.advanced] as const),
+  ]);
+  const filteredCustomNames = new Set(leadingCustomProxyGroups.map((group) => group.name));
+  for (const group of groups) {
+    if (proxyProviderNames.length > 0) {
+      // Provider nodes bypass resolveProxyGroupMembers, so filtered groups need mihomo-side filters.
+      if (filteredCustomNames.has(group.name) && !group.use) group.use = proxyProviderNames;
+      if (group.use) Object.assign(group, buildProviderFilterFields(advancedByGroupName.get(group.name)));
+    }
+    // mihomo rejects groups with neither proxies nor providers (e.g. a region filter that matches nothing).
+    if ((group.proxies?.length ?? 0) === 0 && !group.use) group.proxies = ["DIRECT"];
   }
 
   return groups;

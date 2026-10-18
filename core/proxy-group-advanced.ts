@@ -92,6 +92,34 @@ function matchesRegion(nodeName: string, regions: NodeRegion[]): boolean {
   return false;
 }
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const keywordAlternation = (presets: typeof REGION_PRESETS) =>
+  presets.flatMap((preset) => preset.keywords.map(escapeRegex)).join("|");
+
+/**
+ * mihomo `filter` equivalent of the region and regex filters, for nodes that the client pulls through
+ * proxy-providers and the generator never sees. Mirrors `createNodeFilter`. Exclusion is a negative
+ * lookahead rather than `exclude-filter`, because mihomo applies `exclude-filter` to the group's
+ * literal `proxies` too, while `filter` (like `createNodeFilter`) only touches provider nodes.
+ */
+export function buildProviderFilterFields(value: ProxyGroupAdvancedConfig | undefined): { filter?: string } {
+  const advanced = normalizeProxyGroupAdvancedConfig(value);
+  const regions = advanced.regions ?? [];
+  const selected = REGION_PRESETS.filter((preset) => preset.id !== "other" && regions.includes(preset.id));
+  const known = REGION_PRESETS.filter((preset) => preset.id !== "other");
+
+  const conditions: string[] = [];
+  if (regions.length > 0) {
+    const matchSelected = selected.length > 0 ? `(?=.*(?:${keywordAlternation(selected)}))` : "";
+    const matchOther = regions.includes("other") ? `(?!.*(?:${keywordAlternation(known)}))` : "";
+    conditions.push(matchSelected && matchOther ? `(?:${matchSelected}|${matchOther})` : matchSelected || matchOther);
+  }
+  if (advanced.includeRegex && compileRegex(advanced.includeRegex)) conditions.push(`(?=.*(?:${advanced.includeRegex}))`);
+  if (advanced.excludeRegex && compileRegex(advanced.excludeRegex)) conditions.push(`(?!.*(?:${advanced.excludeRegex}))`);
+
+  return conditions.length > 0 ? { filter: `(?i)^${conditions.join("")}` } : {};
+}
+
 function normalizeStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
