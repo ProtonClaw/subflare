@@ -2,9 +2,14 @@
   "extends": "./tsconfig.node.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.worker.tsbuildinfo",
-    "types": ["./worker-configuration.d.ts", "vite/client"],
+    "types": ["./worker-configuration.d.ts", "node", "vite/client"],
+    "erasableSyntaxOnly": false,
     "module": "esnext",
     "moduleResolution": "bundler",
+    "allowJs": true,
+    "paths": {
+      "@subboost/core/*": ["./core/*"]
+    }
   },
-  "include": ["worker"]
+  "include": ["worker", "core"]
 }

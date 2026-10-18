@@ -1,9 +1,17 @@
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
+import { authRoutes } from "./routes/auth";
 import { healthRoutes } from "./routes/health";
+import { publicRoutes } from "./routes/public";
+import { subscriptionRoutes } from "./routes/subscriptions";
 
-export const app = new Hono<{ Bindings: Env }>()
-  .basePath("/api")
+const api = new Hono<{ Bindings: Env }>()
+  .use(csrf())
   .route("/", healthRoutes)
+  .route("/", authRoutes)
+  .route("/", subscriptionRoutes)
   .notFound((c) => c.json({ error: "Not Found" }, 404));
 
-export type AppType = typeof app;
+export const app = new Hono<{ Bindings: Env }>().route("/api", api).route("/", publicRoutes);
+
+export type AppType = typeof api;

@@ -1,14 +1,24 @@
 # SubFlare
 
-Self-hosted proxy subscription converter and manager that runs entirely on Cloudflare Workers, with an optional single-process local deployment.
+Self-hosted Clash / Mihomo subscription converter and manager that runs entirely on Cloudflare Workers (free plan friendly).
 
-> Status: early development (phase 0 — platform skeleton).
+> Status: early development. Mihomo output works end to end; PostgreSQL / local Node runtime and more client formats are planned.
+
+## Features
+
+- Merge airport subscription URLs and raw nodes (ss / vmess / vless / trojan / hysteria2 / tuic / …, Base64, Clash YAML) into one Mihomo config
+- Rule templates (minimal / standard / full) with per-group customization
+- Two node modes:
+  - **Client fetch** (default): emits `proxy-providers`, so the client downloads nodes from the airport directly — works even when airports block Cloudflare egress
+  - **Cloud snapshot**: the Worker fetches and parses nodes, shows traffic / expiry, and refreshes on a Cron schedule
+- One link per subscription, QR code, one-click import into Clash / Stash, link rotation
+- Single-admin token login (HttpOnly session cookie or `Authorization: Bearer`)
 
 ## Stack
 
 - Cloudflare Workers + Static Assets, built with the Cloudflare Vite plugin
-- API: Hono (typed RPC client for the frontend)
-- Frontend: React + Tailwind CSS
+- API: Hono (typed RPC client for the frontend), Zod validation
+- Frontend: React, Tailwind CSS, shadcn/ui, TanStack Query
 - Database: Drizzle ORM — Cloudflare D1 / SQLite, PostgreSQL planned
 - Cache: Workers KV; scheduled refresh via Cron Triggers
 
@@ -16,6 +26,7 @@ Self-hosted proxy subscription converter and manager that runs entirely on Cloud
 
 ```bash
 npm install
+cp .dev.vars.example .dev.vars   # set SUBFLARE_TOKEN
 npm run db:migrate:local
 npm run dev
 ```
@@ -24,9 +35,12 @@ npm run dev
 
 ```bash
 npx wrangler login
-npm run deploy            # auto-provisions D1 and KV on first deploy
+npm run deploy                         # auto-provisions D1 and KV on first deploy
 npm run db:migrate:remote
+npx wrangler secret put SUBFLARE_TOKEN # login token, at least 8 characters
 ```
+
+`*.workers.dev` is not reachable from mainland China; bind a custom domain in the Cloudflare dashboard if needed.
 
 ## License
 

@@ -1,40 +1,24 @@
-import type { InferResponseType } from "hono/client";
-import { useEffect, useState } from "react";
-import { api } from "./lib/api";
+import { Loader2Icon } from "lucide-react";
+import { Dashboard } from "@/components/dashboard";
+import { LoginScreen } from "@/components/login";
+import { useMe } from "@/hooks/use-api";
 
-type Health = InferResponseType<typeof api.health.$get>;
+export default function App() {
+  const me = useMe();
 
-function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.health
-      .$get()
-      .then((res) => res.json())
-      .then(setHealth)
-      .catch((err: unknown) => setError(String(err)));
-  }, []);
-
-  return (
-    <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-6 p-6 font-sans">
-      <h1 className="text-2xl font-semibold tracking-tight">SubFlare</h1>
-      {error && <p className="text-red-600">{error}</p>}
-      {!health && !error && <p className="text-zinc-500">Checking…</p>}
-      {health && (
-        <ul className="divide-y rounded-xl border">
-          {Object.entries(health.checks).map(([name, check]) => (
-            <li key={name} className="flex items-center justify-between px-4 py-3">
-              <span className="font-medium uppercase">{name}</span>
-              <span className={check.ok ? "text-emerald-600" : "text-red-600"}>
-                {check.ok ? `ok · ${check.latencyMs}ms` : check.error}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
-  );
+  if (me.isPending) {
+    return (
+      <div className="grid min-h-svh place-items-center">
+        <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  if (me.isError) {
+    return (
+      <div className="grid min-h-svh place-items-center p-6 text-sm text-destructive">
+        无法连接服务：{me.error.message}
+      </div>
+    );
+  }
+  return me.data.authenticated ? <Dashboard /> : <LoginScreen configured={me.data.configured} />;
 }
-
-export default App;

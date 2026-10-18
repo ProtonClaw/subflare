@@ -1,0 +1,2 @@
+# Login token for the dashboard and API (min 8 chars). In production: npx wrangler secret put SUBFLARE_TOKEN
+SUBFLARE_TOKEN=change-me-please
