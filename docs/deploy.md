@@ -8,6 +8,9 @@ SubFlare 完全运行在 Cloudflare 上，**免费套餐即可使用**，不需�
 |---|---|---|
 | [方式一：网页一键部署](#方式一网页一键部署推荐) | 第一次用、不想碰命令行 | Cloudflare 账号 + GitHub 账号 |
 | [方式二：命令行一键部署](#方式二命令行一键部署) | 有电脑或服务器、习惯命令行 | Cloudflare 账号 + Cloudflare API Token + 装了 Node.js 22+ 的电脑 |
+| [方式三：Docker 自托管](#方式三docker-自托管) | 有自己的服务器 / NAS，不想依赖 Cloudflare | 一台装了 Docker 的机器 |
+
+方式一、二运行在 Cloudflare 上；方式三运行在你自己的机器上，数据保存在本地 SQLite 文件中，功能和生成的配置与 Cloudflare 版完全一致。
 
 部署完成后，请继续看 [部署后：第一次使用](#部署后第一次使用) 和 [绑定自定义域名](#绑定自定义域名国内访问必看)。
 
@@ -200,6 +203,117 @@ npx wrangler secret put SUBFLARE_TOKEN   # 按提示粘贴登录令牌
 交互模式下可能出现的提示：第一次使用 Workers 会要求注册 `workers.dev` 子域，输入一个名字即可；数据库迁移提示 “Ok to proceed?” 时输入 `y`。
 
 </details>
+
+---
+
+## 方式三：Docker 自托管
+
+### 第 1 步：安装 Docker
+
+按照 <https://docs.docker.com/engine/install/> 安装 Docker（自带 `docker compose`）。确认：
+
+```bash
+docker --version
+docker compose version
+```
+
+### 第 2 步：下载代码并设置登录令牌
+
+```bash
+git clone https://github.com/ProtonClaw/subflare.git
+cd subflare
+```
+
+在 `subflare` 目录下新建 `.env` 文件，内容如下：
+
+```ini
+# 必填：后台登录令牌（至少 8 位），例如用 openssl rand -hex 16 生成
+SUBFLARE_TOKEN=换成你的令牌
+# 可选：对外端口，默认 8787
+# SUBFLARE_PORT=8787
+```
+
+### 第 3 步：启动
+
+```bash
+docker compose up -d --build
+```
+
+首次需要构建镜像，约 1～3 分钟。完成后检查状态：
+
+```bash
+docker compose ps        # STATUS 显示 healthy 即正常
+docker compose logs -f   # 查看日志，Ctrl+C 退出
+```
+
+浏览器打开 `http://<服务器 IP>:8787`，输入登录令牌即可使用。
+
+### 配置 HTTPS（公网访问强烈建议）
+
+直接用 `http://` 访问时，登录令牌和订阅链接都是明文传输。公网使用请在前面加一层反向代理并启用 HTTPS。
+
+**Caddy**（自动申请证书，最简单）：
+
+```text
+sub.example.com {
+    reverse_proxy 127.0.0.1:8787
+}
+```
+
+**Nginx**：必须传递以下请求头，否则登录后的保存操作会被拒绝，拉取记录里的 IP 也会不正确：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8787;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+使用反向代理后，建议把 `docker-compose.yml` 中的端口改为 `"127.0.0.1:8787:8787"`，只允许本机访问。
+
+### 更新
+
+```bash
+cd subflare
+git pull
+docker compose up -d --build
+```
+
+启动时会自动执行数据库迁移，数据不会丢失。
+
+### 备份与恢复
+
+数据保存在 Docker 数据卷 `subflare_subflare-data` 中（`docker compose down` 不会删除它；`docker compose down -v` **会删除**）。
+
+```bash
+# 备份：先停止，避免复制到写了一半的数据
+docker compose stop
+docker compose cp subflare:/data ./backup-$(date +%F)
+docker compose start
+
+# 恢复（第三行修正文件属主，否则会报 readonly database）
+docker compose stop
+docker compose cp ./backup-2026-01-01/. subflare:/data
+docker compose run --rm --no-deps --user root --entrypoint chown subflare -R node:node /data
+docker compose start
+```
+
+### 与 Cloudflare 版的区别
+
+| | Cloudflare 版 | Docker 版 |
+|---|---|---|
+| 访问地址 | `*.workers.dev`（国内需绑定域名） | 你的服务器 IP / 域名 |
+| 抓取机场订阅的 IP | Cloudflare 的 IP | 你服务器的 IP |
+| 拉取记录的地理位置（国家、城市、运营商） | 有 | **没有**，只记录 IP 和客户端 |
+| 拉取记录的 IP | Cloudflare 提供 | 优先取反向代理传来的 `X-Real-IP` / `X-Forwarded-For`，否则取连接地址 |
+| 数据存储 | Cloudflare D1 | 本地 SQLite 文件 |
+
+> 没有反向代理、直接暴露端口时，客户端可以伪造 `X-Forwarded-For`，拉取记录里的 IP 仅供参考。
+>
+> 通过 `localhost` 访问时，拉取记录中的 IP 会显示为 Docker 网关地址（如 `172.x.x.1`），属于正常现象。
 
 ---
 

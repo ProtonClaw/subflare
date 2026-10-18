@@ -4,9 +4,9 @@ Self-hosted Clash / Mihomo subscription converter and manager that runs entirely
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ProtonClaw/subflare)
 
-> 第一次部署？请看 **[部署指南（中文）](./docs/deploy.md)**：网页一键部署、命令行一键部署、绑定自定义域名、第一次使用和常见问题。
+> 第一次部署？请看 **[部署指南（中文）](./docs/deploy.md)**：网页一键部署、命令行一键部署、Docker 自托管、绑定自定义域名、第一次使用和常见问题。
 
-> Status: early development. Mihomo output works end to end; PostgreSQL / local Node runtime and more client formats are planned.
+> Status: early development. Mihomo output works end to end; PostgreSQL and more client formats are planned.
 
 ## Features
 
@@ -56,6 +56,15 @@ npx wrangler secret put SUBFLARE_TOKEN # login token, at least 8 characters
 ```
 
 `*.workers.dev` is not reachable from mainland China; bind a custom domain in the Cloudflare dashboard if needed.
+
+### Self-host with Docker
+
+Runs the same Worker code on Node.js with SQLite (`node:sqlite`) — no Cloudflare account needed:
+
+```bash
+echo "SUBFLARE_TOKEN=<login token>" > .env
+docker compose up -d --build   # http://localhost:8787, data in the subflare-data volume
+```
 
 ## License
 

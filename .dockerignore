@@ -1,0 +1,10 @@
+.git
+node_modules
+dist
+data
+.wrangler
+.dev.vars
+.env*
+*.log
+Dockerfile
+docker-compose.yml

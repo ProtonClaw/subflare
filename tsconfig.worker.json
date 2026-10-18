@@ -11,5 +11,5 @@
       "@subboost/core/*": ["./core/*"]
     }
   },
-  "include": ["worker", "core"]
+  "include": ["worker", "core", "node"]
 }

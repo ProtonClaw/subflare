@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 function gitCommit(): string {
+  if (process.env.BUILD_COMMIT) return process.env.BUILD_COMMIT;
   try {
     return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
   } catch {
