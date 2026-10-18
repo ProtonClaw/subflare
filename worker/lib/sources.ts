@@ -26,6 +26,8 @@ export type CollectedNodes = {
   allNodes: ParsedNode[];
   userinfo: SubscriptionUserInfo | null;
   sources: SourceReport[];
+  /** Parsed nodes per source id; null when the source failed or was not fetched. */
+  bySource: Map<string, ParsedNode[] | null>;
 };
 
 type FetchedText = { ok: true; text: string; userinfo: SubscriptionUserInfo | null } | { ok: false; error: string };
@@ -102,7 +104,10 @@ export async function collectNodes(
 
   const keepRemoteNodes = options.mode === "snapshot";
   const nodes = results.flatMap((r) => (r.report.type === "url" && !keepRemoteNodes ? [] : r.nodes));
-  return { nodes, allNodes: results.flatMap((r) => r.nodes), userinfo, sources: results.map((r) => r.report) };
+  const bySource = new Map(
+    results.map((r) => [r.report.id, r.report.error || (r.report.type === "url" && !r.report.fetched) ? null : r.nodes])
+  );
+  return { nodes, allNodes: results.flatMap((r) => r.nodes), userinfo, sources: results.map((r) => r.report), bySource };
 }
 
 export function summarizeErrors(reports: SourceReport[]): string | null {

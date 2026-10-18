@@ -378,7 +378,20 @@ function NodesPanel({ sub }: { sub: SubscriptionDetail }) {
 
   return (
     <Panel>
-      <PanelTitle icon={LayersIcon} title="节点" description={`${sub.nodeCount} 个`} />
+      <PanelTitle
+        icon={LayersIcon}
+        title="节点"
+        description={`${sub.nodeCount} 个${sub.deletedNodeCount > 0 ? `，已删除 ${sub.deletedNodeCount} 个` : ""}`}
+        action={
+          (sub.nodeCount > 0 || sub.deletedNodeCount > 0) && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/subscriptions/${sub.id}/nodes`}>
+                <PencilIcon /> 管理节点
+              </Link>
+            </Button>
+          )
+        }
+      />
       {sub.nodes.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           {sub.mode === "provider" ? "节点由客户端从订阅链接拉取" : "没有节点"}

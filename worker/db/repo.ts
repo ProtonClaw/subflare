@@ -14,12 +14,16 @@ export type Source = {
 
 export type TemplateId = "minimal" | "standard" | "full";
 
+/** A node the user deleted; matched by identity on refresh so it does not come back. */
+export type DeletedNode = { originName: string; name: string; node: ParsedNode };
+
 export type SubscriptionConfig = {
   sources: Source[];
   template: TemplateId;
   enabledGroups?: string[];
   /** Custom template reference; when set, `template` and `enabledGroups` are ignored. */
   templateId?: string;
+  deletedNodes?: DeletedNode[];
 };
 
 export type SubscriptionMode = "provider" | "snapshot";
@@ -61,6 +65,7 @@ export interface SubscriptionRepository {
   create(input: NewSubscription & Pick<Subscription, "id" | "token">, refresh: RefreshResult): Promise<Subscription>;
   update(id: string, input: NewSubscription, refresh: RefreshResult): Promise<Subscription | null>;
   saveRefresh(id: string, refresh: RefreshResult): Promise<void>;
+  saveNodes(id: string, nodes: ParsedNode[], config: SubscriptionConfig): Promise<Subscription | null>;
   rotateToken(id: string, token: string): Promise<string | null>;
   delete(id: string): Promise<Subscription | null>;
   listDueForRefresh(now: number, limit: number): Promise<Subscription[]>;
@@ -170,6 +175,15 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
     },
     async saveRefresh(id, refresh) {
       await db.update(subscriptions).set(refreshColumns(refresh, Date.now())).where(eq(subscriptions.id, id)).run();
+    },
+    async saveNodes(id, nodes, config) {
+      const row = await db
+        .update(subscriptions)
+        .set({ nodes: JSON.stringify(nodes), nodeCount: nodes.length, config: JSON.stringify(config), updatedAt: Date.now() })
+        .where(eq(subscriptions.id, id))
+        .returning()
+        .get();
+      return row ? toSubscription(row) : null;
     },
     async rotateToken(id, token) {
       const row = await db

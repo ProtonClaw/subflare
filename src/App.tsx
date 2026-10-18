@@ -7,6 +7,7 @@ import { DashboardPage } from "@/pages/dashboard";
 import { SettingsPage } from "@/pages/settings";
 import { SubscriptionDetailPage } from "@/pages/subscription-detail";
 import { SubscriptionEditPage } from "@/pages/subscription-edit";
+import { SubscriptionNodesPage } from "@/pages/subscription-nodes";
 import { SubscriptionsPage } from "@/pages/subscriptions";
 import { TemplateEditPage } from "@/pages/template-edit";
 import { BuiltinTemplatePage, TemplatesPage } from "@/pages/templates";
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/subscriptions" component={SubscriptionsPage} />
         <Route path="/subscriptions/new">{() => <SubscriptionEditPage />}</Route>
         <Route path="/subscriptions/:id/edit">{(p) => <SubscriptionEditPage id={p.id} />}</Route>
+        <Route path="/subscriptions/:id/nodes">{(p) => <SubscriptionNodesPage id={p.id} />}</Route>
         <Route path="/subscriptions/:id">{(p) => <SubscriptionDetailPage id={p.id} />}</Route>
         <Route path="/templates" component={TemplatesPage} />
         <Route path="/templates/new">{() => <TemplateEditPage />}</Route>

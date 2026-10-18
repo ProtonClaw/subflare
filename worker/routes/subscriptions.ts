@@ -4,12 +4,21 @@ import { getTemplateList } from "@subboost/core/templates";
 import type { ParsedNode } from "@subboost/core/types/node";
 import { Hono } from "hono";
 import { z } from "zod";
-import { createD1SubscriptionRepository, statsDay, type NewSubscription, type Subscription } from "../db/repo";
+import { getNodeSourceIds } from "@subboost/core/subscription/node-source-state";
+import {
+  createD1SubscriptionRepository,
+  statsDay,
+  type DeletedNode,
+  type NewSubscription,
+  type Source,
+  type Subscription,
+} from "../db/repo";
 import { createD1TemplateRepository } from "../db/templates-repo";
 import { requireAuth, type AuthEnv } from "../lib/auth";
 import { validate } from "../lib/validate";
 import { invalidateYaml, loadTemplateConfig, renderYaml } from "../lib/render";
-import { collectNodes, summarizeErrors } from "../lib/sources";
+import { applyNodeEdits, buildSnapshot, listNodeState } from "../lib/snapshot";
+import { collectNodes } from "../lib/sources";
 
 const MAX_PREVIEW_NODES = 500;
 
@@ -33,6 +42,12 @@ const SubscriptionInputSchema = z.object({
   autoUpdateInterval: z.number().int().min(1800).max(7 * 86400).nullable(),
 });
 
+const NodeEditsSchema = z.object({
+  rename: z.array(z.object({ from: z.string().min(1).max(200), to: z.string().max(200) })).max(5000).optional(),
+  delete: z.array(z.string().min(1).max(200)).max(5000).optional(),
+  restore: z.array(z.number().int().min(0)).max(1000).optional(),
+});
+
 const PreviewSchema = z.object({ mode: ModeSchema, sources: z.array(SourceSchema).min(1).max(20) });
 
 function summarizeNodes(nodes: ParsedNode[]) {
@@ -40,8 +55,15 @@ function summarizeNodes(nodes: ParsedNode[]) {
 }
 
 function toDetail(sub: Subscription) {
-  const { nodes, ...rest } = sub;
-  return { ...rest, nodes: summarizeNodes(nodes) };
+  const { nodes, config, ...rest } = sub;
+  const { deletedNodes, ...publicConfig } = config;
+  return { ...rest, config: publicConfig, deletedNodeCount: deletedNodes?.length ?? 0, nodes: summarizeNodes(nodes) };
+}
+
+/** Drops deletion records whose source no longer exists. */
+function keepDeletedForSources(deleted: DeletedNode[] | undefined, sources: Source[]): DeletedNode[] {
+  const ids = new Set(sources.map((s) => s.id));
+  return (deleted ?? []).filter((item) => getNodeSourceIds(item.node).some((id) => ids.has(id)));
 }
 
 function newToken(): string {
@@ -52,20 +74,6 @@ function newToken(): string {
 async function templateMissing(db: D1Database, input: NewSubscription): Promise<boolean> {
   const id = input.config.templateId;
   return !!id && !(await createD1TemplateRepository(db).get(id));
-}
-
-async function collectFor(input: Pick<NewSubscription, "mode" | "config">, previous?: Subscription) {
-  const collected = await collectNodes(input.config.sources, {
-    mode: input.mode,
-    fetchRemote: input.mode === "snapshot",
-  });
-  const lastError = summarizeErrors(collected.sources);
-  const keepPrevious = previous && collected.nodes.length === 0 && lastError !== null;
-  return {
-    nodes: keepPrevious ? previous.nodes : collected.nodes,
-    userinfo: collected.userinfo ?? previous?.userinfo ?? null,
-    lastError,
-  };
 }
 
 const PROTECTED = ["/meta", "/preview", "/stats/*", "/subscriptions", "/subscriptions/*"] as const;
@@ -137,7 +145,7 @@ export const subscriptionRoutes = base
   .post("/subscriptions", validate("json", SubscriptionInputSchema), async (c) => {
     const input = c.req.valid("json");
     if (await templateMissing(c.env.DB, input)) return c.json({ error: "模板不存在", code: "TEMPLATE_NOT_FOUND" as const }, 400);
-    const refresh = await collectFor(input);
+    const refresh = await buildSnapshot(input);
     const sub = await createD1SubscriptionRepository(c.env.DB).create(
       { ...input, id: crypto.randomUUID(), token: newToken() },
       refresh
@@ -152,9 +160,11 @@ export const subscriptionRoutes = base
     const repo = createD1SubscriptionRepository(c.env.DB);
     const previous = await repo.get(c.req.param("id"));
     if (!previous) return c.json({ error: "Not Found" }, 404);
-    const input = c.req.valid("json");
-    if (await templateMissing(c.env.DB, input)) return c.json({ error: "模板不存在", code: "TEMPLATE_NOT_FOUND" as const }, 400);
-    const refresh = await collectFor(input, previous);
+    const body = c.req.valid("json");
+    if (await templateMissing(c.env.DB, body)) return c.json({ error: "模板不存在", code: "TEMPLATE_NOT_FOUND" as const }, 400);
+    const deletedNodes = keepDeletedForSources(previous.config.deletedNodes, body.config.sources);
+    const input = { ...body, config: { ...body.config, ...(deletedNodes.length > 0 ? { deletedNodes } : {}) } };
+    const refresh = await buildSnapshot(input, previous);
     const sub = await repo.update(previous.id, input, refresh);
     if (!sub) return c.json({ error: "Not Found" }, 404);
     await invalidateYaml(c.env.KV, sub.token);
@@ -164,7 +174,7 @@ export const subscriptionRoutes = base
     const repo = createD1SubscriptionRepository(c.env.DB);
     const sub = await repo.get(c.req.param("id"));
     if (!sub) return c.json({ error: "Not Found" }, 404);
-    const refresh = await collectFor(sub, sub);
+    const refresh = await buildSnapshot(sub, sub);
     await repo.saveRefresh(sub.id, refresh);
     await invalidateYaml(c.env.KV, sub.token);
     return c.json(toDetail({ ...sub, ...refresh, nodeCount: refresh.nodes.length, lastRefreshedAt: Date.now() }), 200);
@@ -182,6 +192,25 @@ export const subscriptionRoutes = base
     if (!sub) return c.json({ error: "Not Found" }, 404);
     await invalidateYaml(c.env.KV, sub.token);
     return c.json({ ok: true }, 200);
+  })
+  .get("/subscriptions/:id/nodes", async (c) => {
+    const sub = await createD1SubscriptionRepository(c.env.DB).get(c.req.param("id"));
+    return sub ? c.json(listNodeState(sub), 200) : c.json({ error: "Not Found" }, 404);
+  })
+  .patch("/subscriptions/:id/nodes", validate("json", NodeEditsSchema), async (c) => {
+    const repo = createD1SubscriptionRepository(c.env.DB);
+    const sub = await repo.get(c.req.param("id"));
+    if (!sub) return c.json({ error: "Not Found" }, 404);
+    const result = applyNodeEdits(sub.nodes, sub.config.deletedNodes ?? [], c.req.valid("json"));
+    if (!result.ok) return c.json({ error: result.error, code: "INVALID_NODE_EDIT" as const }, 400);
+    const { deletedNodes: _previous, ...config } = sub.config;
+    const saved = await repo.saveNodes(sub.id, result.nodes, {
+      ...config,
+      ...(result.deletedNodes.length > 0 ? { deletedNodes: result.deletedNodes } : {}),
+    });
+    if (!saved) return c.json({ error: "Not Found" }, 404);
+    await invalidateYaml(c.env.KV, saved.token);
+    return c.json(listNodeState(saved), 200);
   })
   .get("/subscriptions/:id/yaml", async (c) => {
     const sub = await createD1SubscriptionRepository(c.env.DB).get(c.req.param("id"));

@@ -3,6 +3,8 @@ import {
   api,
   unwrap,
   type Meta,
+  type NodeEdits,
+  type NodeState,
   type PullStats,
   type TemplateDetail,
   type TemplateInput,
@@ -23,6 +25,7 @@ export const keys = {
   pulls: ["stats", "pulls"] as const,
   templates: ["templates"] as const,
   detail: (id: string) => ["subscriptions", id] as const,
+  nodes: (id: string) => ["subscriptions", id, "nodes"] as const,
 };
 
 export function useMe() {
@@ -89,7 +92,10 @@ export function usePreview() {
 function useInvalidateList() {
   const qc = useQueryClient();
   return (detail?: SubscriptionDetail) => {
-    if (detail) qc.setQueryData(keys.detail(detail.id), detail);
+    if (detail) {
+      qc.setQueryData(keys.detail(detail.id), detail);
+      void qc.invalidateQueries({ queryKey: keys.nodes(detail.id) });
+    }
     return qc.invalidateQueries({ queryKey: keys.list, exact: true });
   };
 }
@@ -110,6 +116,26 @@ export function useRefreshSubscription() {
   return useMutation({
     mutationFn: (id: string) => unwrap<SubscriptionDetail>(api.subscriptions[":id"].refresh.$post({ param: { id } })),
     onSuccess: (detail) => invalidate(detail),
+  });
+}
+
+export function useNodeState(id: string) {
+  return useQuery({
+    queryKey: keys.nodes(id),
+    queryFn: () => unwrap<NodeState>(api.subscriptions[":id"].nodes.$get({ param: { id } })),
+  });
+}
+
+export function useEditNodes(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (edits: NodeEdits) =>
+      unwrap<NodeState>(api.subscriptions[":id"].nodes.$patch({ param: { id }, json: edits })),
+    onSuccess: (state) => {
+      qc.setQueryData(keys.nodes(id), state);
+      void qc.invalidateQueries({ queryKey: keys.detail(id), exact: true });
+      void qc.invalidateQueries({ queryKey: keys.list, exact: true });
+    },
   });
 }
 

@@ -1,6 +1,6 @@
 import { createD1SubscriptionRepository } from "../db/repo";
 import { invalidateYaml } from "./render";
-import { collectNodes, summarizeErrors } from "./sources";
+import { buildSnapshot } from "./snapshot";
 
 // Free-plan invocations allow 50 external subrequests; each subscription may fetch several sources.
 const MAX_PER_RUN = 5;
@@ -12,13 +12,10 @@ export async function refreshDueSubscriptions(env: Env) {
 
   for (const sub of due) {
     try {
-      const collected = await collectNodes(sub.config.sources, { mode: sub.mode, fetchRemote: true });
-      const lastError = summarizeErrors(collected.sources);
-      // Keep the previous snapshot when every remote source failed, so a transient outage doesn't empty the config.
-      const nodes = collected.nodes.length === 0 && lastError ? sub.nodes : collected.nodes;
-      await repo.saveRefresh(sub.id, { nodes, userinfo: collected.userinfo ?? sub.userinfo, lastError });
+      const snapshot = await buildSnapshot(sub, sub);
+      await repo.saveRefresh(sub.id, snapshot);
       await invalidateYaml(env.KV, sub.token);
-      if (lastError) summary.failed++;
+      if (snapshot.lastError) summary.failed++;
       else summary.refreshed++;
     } catch (error) {
       summary.failed++;
