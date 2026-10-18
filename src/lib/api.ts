@@ -8,6 +8,7 @@ export type SubscriptionDetail = InferResponseType<(typeof api.subscriptions)[":
 export type SubscriptionInput = InferRequestType<typeof api.subscriptions.$post>["json"];
 export type PreviewResult = InferResponseType<typeof api.preview.$post, 200>;
 export type Meta = InferResponseType<typeof api.meta.$get, 200>;
+export type PullStats = InferResponseType<typeof api.stats.pulls.$get, 200>;
 
 export class ApiError extends Error {
   constructor(

@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
@@ -18,6 +18,20 @@ export const subscriptions = sqliteTable("subscriptions", {
   autoUpdateInterval: integer("auto_update_interval"),
   lastRefreshedAt: integer("last_refreshed_at"),
   lastError: text("last_error"),
+  lastPulledAt: integer("last_pulled_at"),
+  lastClient: text("last_client"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const pullStats = sqliteTable(
+  "pull_stats",
+  {
+    subscriptionId: text("subscription_id").notNull(),
+    /** UTC date, YYYY-MM-DD. */
+    day: text("day").notNull(),
+    client: text("client").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.subscriptionId, t.day, t.client] }), index("pull_stats_day_idx").on(t.day)]
+);

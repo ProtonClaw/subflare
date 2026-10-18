@@ -3,6 +3,7 @@ import {
   api,
   unwrap,
   type Meta,
+  type PullStats,
   type PreviewResult,
   type SubscriptionDetail,
   type SubscriptionInput,
@@ -15,6 +16,7 @@ export const keys = {
   me: ["me"] as const,
   meta: ["meta"] as const,
   list: ["subscriptions"] as const,
+  pulls: ["stats", "pulls"] as const,
   detail: (id: string) => ["subscriptions", id] as const,
 };
 
@@ -49,6 +51,14 @@ export function useSubscriptions() {
   return useQuery({
     queryKey: keys.list,
     queryFn: async () => (await unwrap<{ items: SubscriptionSummary[] }>(api.subscriptions.$get())).items,
+  });
+}
+
+export function usePullStats() {
+  return useQuery({
+    queryKey: keys.pulls,
+    queryFn: () => unwrap<PullStats>(api.stats.pulls.$get({ query: { days: "7" } })),
+    refetchInterval: 60_000,
   });
 }
 
@@ -109,6 +119,7 @@ export function useDeleteSubscription() {
     mutationFn: (id: string) => unwrap<{ ok: true }>(api.subscriptions[":id"].$delete({ param: { id } })),
     onSuccess: (_, id) => {
       qc.removeQueries({ queryKey: keys.detail(id) });
+      void qc.invalidateQueries({ queryKey: keys.pulls });
       return qc.invalidateQueries({ queryKey: keys.list, exact: true });
     },
   });

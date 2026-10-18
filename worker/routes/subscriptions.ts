@@ -3,7 +3,7 @@ import { getTemplateList } from "@subboost/core/templates";
 import type { ParsedNode } from "@subboost/core/types/node";
 import { Hono } from "hono";
 import { z } from "zod";
-import { createD1SubscriptionRepository, type NewSubscription, type Subscription } from "../db/repo";
+import { createD1SubscriptionRepository, utcDay, type NewSubscription, type Subscription } from "../db/repo";
 import { requireAuth, type AuthEnv } from "../lib/auth";
 import { validate } from "../lib/validate";
 import { invalidateYaml, renderYaml } from "../lib/render";
@@ -60,7 +60,7 @@ async function collectFor(input: Pick<NewSubscription, "mode" | "config">, previ
   };
 }
 
-const PROTECTED = ["/meta", "/preview", "/subscriptions", "/subscriptions/*"] as const;
+const PROTECTED = ["/meta", "/preview", "/stats/*", "/subscriptions", "/subscriptions/*"] as const;
 
 const base = new Hono<AuthEnv>();
 for (const path of PROTECTED) base.use(path, requireAuth);
@@ -87,6 +87,27 @@ export const subscriptionRoutes = base
       nodeCount: collected.allNodes.length,
       nodes: summarizeNodes(collected.allNodes),
       userinfo: collected.userinfo,
+    });
+  })
+  .get("/stats/pulls", validate("query", z.object({ days: z.coerce.number().int().min(1).max(30).default(7) })), async (c) => {
+    const { days } = c.req.valid("query");
+    const now = Date.now();
+    const dayKeys = Array.from({ length: days }, (_, i) => utcDay(now - (days - 1 - i) * 86_400_000));
+    const rows = await createD1SubscriptionRepository(c.env.DB).listPullStats(dayKeys[0]);
+
+    const perDay = new Map(dayKeys.map((d) => [d, 0]));
+    const perClient = new Map<string, number>();
+    const perSubscription: Record<string, number> = {};
+    for (const r of rows) {
+      perDay.set(r.day, (perDay.get(r.day) ?? 0) + r.count);
+      perClient.set(r.client, (perClient.get(r.client) ?? 0) + r.count);
+      perSubscription[r.subscriptionId] = (perSubscription[r.subscriptionId] ?? 0) + r.count;
+    }
+    return c.json({
+      total: rows.reduce((sum, r) => sum + r.count, 0),
+      days: dayKeys.map((day) => ({ day, count: perDay.get(day) ?? 0 })),
+      clients: [...perClient].map(([client, count]) => ({ client, count })).sort((a, b) => b.count - a.count),
+      perSubscription,
     });
   })
   .get("/subscriptions", async (c) => {

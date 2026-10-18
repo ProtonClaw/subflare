@@ -68,7 +68,15 @@ function Usage({ info }: { info: NonNullable<SubscriptionSummary["userinfo"]> })
   );
 }
 
-export function SubscriptionCard({ sub, onEdit }: { sub: SubscriptionSummary; onEdit: () => void }) {
+export function SubscriptionCard({
+  sub,
+  pulls7d,
+  onEdit,
+}: {
+  sub: SubscriptionSummary;
+  pulls7d: number;
+  onEdit: () => void;
+}) {
   const [shareOpen, setShareOpen] = useState(false);
   const [confirm, setConfirm] = useState<"delete" | "rotate" | null>(null);
   const refresh = useRefreshSubscription();
@@ -160,8 +168,15 @@ export function SubscriptionCard({ sub, onEdit }: { sub: SubscriptionSummary; on
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <div className="min-w-0 text-xs text-muted-foreground">
-          <div className="truncate">更新于 {formatRelative(sub.lastRefreshedAt)}</div>
-          {sub.mode === "snapshot" && <div className="truncate">{intervalLabel(sub.autoUpdateInterval)}</div>}
+          <div className="truncate">
+            {sub.lastPulledAt
+              ? `${formatRelative(sub.lastPulledAt)}被 ${sub.lastClient} 拉取 · 7 天 ${pulls7d} 次`
+              : "尚未被客户端拉取"}
+          </div>
+          <div className="truncate">
+            更新于 {formatRelative(sub.lastRefreshedAt)}
+            {sub.mode === "snapshot" && ` · ${intervalLabel(sub.autoUpdateInterval)}`}
+          </div>
         </div>
         <div className="flex shrink-0 gap-1.5">
           <Tooltip>

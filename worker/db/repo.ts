@@ -1,8 +1,8 @@
 import type { ParsedNode } from "@subboost/core/types/node";
 import type { SubscriptionUserInfo } from "@subboost/core/subscription/subscription-userinfo";
-import { and, desc, eq, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { subscriptions } from "./schema";
+import { pullStats, subscriptions } from "./schema";
 
 export type SourceType = "url" | "nodes";
 
@@ -34,6 +34,8 @@ export type Subscription = {
   autoUpdateInterval: number | null;
   lastRefreshedAt: number | null;
   lastError: string | null;
+  lastPulledAt: number | null;
+  lastClient: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -47,6 +49,8 @@ export type NewSubscription = Pick<Subscription, "name" | "mode" | "config" | "a
 
 export type RefreshResult = Pick<Subscription, "nodes" | "userinfo" | "lastError">;
 
+export type PullStatRow = { subscriptionId: string; day: string; client: string; count: number };
+
 export interface SubscriptionRepository {
   list(): Promise<SubscriptionSummary[]>;
   get(id: string): Promise<Subscription | null>;
@@ -57,6 +61,13 @@ export interface SubscriptionRepository {
   rotateToken(id: string, token: string): Promise<string | null>;
   delete(id: string): Promise<Subscription | null>;
   listDueForRefresh(now: number, limit: number): Promise<Subscription[]>;
+  recordPull(id: string, client: string, now: number): Promise<void>;
+  listPullStats(sinceDay: string): Promise<PullStatRow[]>;
+  prunePullStats(beforeDay: string): Promise<void>;
+}
+
+export function utcDay(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
 type Row = typeof subscriptions.$inferSelect;
@@ -161,8 +172,11 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
       return row?.token ?? null;
     },
     async delete(id) {
-      const row = await db.delete(subscriptions).where(eq(subscriptions.id, id)).returning().get();
-      return row ? toSubscription(row) : null;
+      const [rows] = await db.batch([
+        db.delete(subscriptions).where(eq(subscriptions.id, id)).returning(),
+        db.delete(pullStats).where(eq(pullStats.subscriptionId, id)),
+      ]);
+      return rows[0] ? toSubscription(rows[0]) : null;
     },
     async listDueForRefresh(now, limit) {
       const rows = await db
@@ -182,6 +196,24 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
         .limit(limit)
         .all();
       return rows.map(toSubscription);
+    },
+    async recordPull(id, client, now) {
+      await db.batch([
+        db
+          .insert(pullStats)
+          .values({ subscriptionId: id, day: utcDay(now), client, count: 1 })
+          .onConflictDoUpdate({
+            target: [pullStats.subscriptionId, pullStats.day, pullStats.client],
+            set: { count: sql`${pullStats.count} + 1` },
+          }),
+        db.update(subscriptions).set({ lastPulledAt: now, lastClient: client }).where(eq(subscriptions.id, id)),
+      ]);
+    },
+    async listPullStats(sinceDay) {
+      return db.select().from(pullStats).where(gte(pullStats.day, sinceDay)).all();
+    },
+    async prunePullStats(beforeDay) {
+      await db.delete(pullStats).where(lt(pullStats.day, beforeDay)).run();
     },
   };
 }

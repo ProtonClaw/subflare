@@ -1,6 +1,7 @@
 import { LogOutIcon, PlusIcon, RssIcon } from "lucide-react";
 import { useState } from "react";
 import { Logo } from "@/components/logo";
+import { Overview } from "@/components/overview";
 import { ShareDialog } from "@/components/share-dialog";
 import { SubscriptionCard } from "@/components/subscription-card";
 import { SubscriptionEditor } from "@/components/subscription-editor";
@@ -8,13 +9,14 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useLogout, useSubscriptions } from "@/hooks/use-api";
+import { useLogout, usePullStats, useSubscriptions } from "@/hooks/use-api";
 import type { SubscriptionDetail } from "@/lib/api";
 
 const REPO_URL = "https://github.com/ProtonClaw/subflare";
 
 export function Dashboard() {
   const subs = useSubscriptions();
+  const pulls = usePullStats();
   const logout = useLogout();
   const [editor, setEditor] = useState<{ open: boolean; id: string | null }>({ open: false, id: null });
   const [created, setCreated] = useState<SubscriptionDetail | null>(null);
@@ -79,11 +81,20 @@ export function Dashboard() {
         ) : subs.data.length === 0 ? (
           <EmptyState onCreate={() => openEditor(null)} />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {subs.data.map((sub) => (
-              <SubscriptionCard key={sub.id} sub={sub} onEdit={() => openEditor(sub.id)} />
-            ))}
-          </div>
+          <>
+            <Overview subs={subs.data} pulls={pulls.data} now={subs.dataUpdatedAt} />
+            <h2 className="mb-4 text-sm font-medium text-muted-foreground">全部订阅</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {subs.data.map((sub) => (
+                <SubscriptionCard
+                  key={sub.id}
+                  sub={sub}
+                  pulls7d={pulls.data?.perSubscription[sub.id] ?? 0}
+                  onEdit={() => openEditor(sub.id)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </main>
 
