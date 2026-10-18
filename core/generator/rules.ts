@@ -103,10 +103,19 @@ export function resolveModuleNameFromModule(module: ProxyGroupModule, overrides?
 
 export { getEffectiveModuleRules };
 
+const moduleNameMapCache = new WeakMap<object, Record<string, string>>();
+const NO_OVERRIDES = {};
+
 function buildModuleNameMap(overrides?: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    PROXY_GROUP_MODULES.map((module) => [module.id, resolveModuleNameFromModule(module, overrides)])
-  );
+  const cacheKey = overrides ?? NO_OVERRIDES;
+  let map = moduleNameMapCache.get(cacheKey);
+  if (!map) {
+    map = Object.fromEntries(
+      PROXY_GROUP_MODULES.map((module) => [module.id, resolveModuleNameFromModule(module, overrides)])
+    );
+    moduleNameMapCache.set(cacheKey, map);
+  }
+  return map;
 }
 
 function getEnabledCustomProxyGroups(customProxyGroups: CustomProxyGroup[]): CustomProxyGroup[] {

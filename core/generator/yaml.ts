@@ -170,12 +170,43 @@ function getOrderedMappingKeys(record: Record<string, unknown>, preferredKeys: r
  * 防止 YAML 注入和配置破坏
  */
 function escapeYamlDoubleQuotedString(value: string): string {
+  if (!/[\\"\r\n\t]/.test(value)) return value;
   return value
     .replace(/\\/g, "\\\\")
     .replace(/"/g, '\\"')
     .replace(/\r/g, "\\r")
     .replace(/\n/g, "\\n")
     .replace(/\t/g, "\\t");
+}
+
+function shouldQuoteYamlString(s: string): boolean {
+  if (s === "") return true;
+  // 需要引号的情况：包含特殊字符或空格
+  // 注意：在 flow style（{...} / [...]）里，`?` 等字符会触发更严格的 YAML 解析器报错（例如 PyYAML / 部分 Clash 客户端）。
+  if (/[+":,\[\]{}#&*!|>'%@`?\n]/.test(s) || s.includes(" ")) return true;
+
+  // YAML 的“易被误判为标量类型”的字符串（布尔/空值/数字）
+  // 例如：short-id: 7250（若不加引号，Clash 侧 YAML 解析可能会当成数字）
+  const lower = s.toLowerCase();
+  if (
+    lower === "null" ||
+    lower === "~" ||
+    lower === "true" ||
+    lower === "false" ||
+    lower === "yes" ||
+    lower === "no" ||
+    lower === "on" ||
+    lower === "off"
+  ) {
+    return true;
+  }
+
+  // 纯数字 / 浮点 / 科学计数等 —— 统一加引号，避免被解析成 number
+  if (/^[+-]?\d+$/.test(s)) return true;
+  if (/^[+-]?(?:\d*\.\d+|\d+\.\d*)(?:[eE][+-]?\d+)?$/.test(s)) return true;
+  if (/^[+-]?\d+[eE][+-]?\d+$/.test(s)) return true;
+
+  return false;
 }
 
 /**
@@ -186,36 +217,6 @@ function toInlineYaml(value: unknown): string {
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return String(value);
   if (typeof value === "string") {
-    const shouldQuoteYamlString = (s: string) => {
-      if (s === "") return true;
-      // 需要引号的情况：包含特殊字符或空格
-      // 注意：在 flow style（{...} / [...]）里，`?` 等字符会触发更严格的 YAML 解析器报错（例如 PyYAML / 部分 Clash 客户端）。
-      if (/[+":,\[\]{}#&*!|>'%@`?\n]/.test(s) || s.includes(" ")) return true;
-
-      // YAML 的“易被误判为标量类型”的字符串（布尔/空值/数字）
-      // 例如：short-id: 7250（若不加引号，Clash 侧 YAML 解析可能会当成数字）
-      const lower = s.toLowerCase();
-      if (
-        lower === "null" ||
-        lower === "~" ||
-        lower === "true" ||
-        lower === "false" ||
-        lower === "yes" ||
-        lower === "no" ||
-        lower === "on" ||
-        lower === "off"
-      ) {
-        return true;
-      }
-
-      // 纯数字 / 浮点 / 科学计数等 —— 统一加引号，避免被解析成 number
-      if (/^[+-]?\d+$/.test(s)) return true;
-      if (/^[+-]?(?:\d*\.\d+|\d+\.\d*)(?:[eE][+-]?\d+)?$/.test(s)) return true;
-      if (/^[+-]?\d+[eE][+-]?\d+$/.test(s)) return true;
-
-      return false;
-    };
-
     if (shouldQuoteYamlString(value)) {
       return `"${escapeYamlDoubleQuotedString(value)}"`;
     }
@@ -239,7 +240,19 @@ function toInlineYaml(value: unknown): string {
   return String(value);
 }
 
+const blockScalarCache = new Map<string, string>();
+const BLOCK_SCALAR_CACHE_LIMIT = 5000;
+
 function toBlockSequenceScalar(value: string): string {
+  const cached = blockScalarCache.get(value);
+  if (cached !== undefined) return cached;
+  if (blockScalarCache.size >= BLOCK_SCALAR_CACHE_LIMIT) blockScalarCache.clear();
+  const result = computeBlockSequenceScalar(value);
+  blockScalarCache.set(value, result);
+  return result;
+}
+
+function computeBlockSequenceScalar(value: string): string {
   const trimmed = value.trim();
   const ambiguous =
     !value ||

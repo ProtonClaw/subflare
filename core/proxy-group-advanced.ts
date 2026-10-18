@@ -263,36 +263,43 @@ function buildMemberFromRef(
   return name ? { ref, key, name, kind: ref.kind } : null;
 }
 
-function nodePassesAdvancedFilters(
-  member: ProxyGroupResolvedMember,
+function createNodeFilter(
   nodeByName: Map<string, ParsedNode>,
   advanced: ProxyGroupAdvancedConfig
-): boolean {
-  if (member.ref.kind !== "node") return true;
-  const node = nodeByName.get(member.ref.name);
-  if (!node) return false;
-
+): (member: ProxyGroupResolvedMember) => boolean {
   const sourceIds = normalizeStringList(advanced.sourceIds);
-  if (sourceIds.length > 0) {
-    const sourceIdSet = new Set(sourceIds);
-    if (!getNodeSourceIds(node).some((id) => sourceIdSet.has(id))) return false;
-  }
-
+  const sourceIdSet = sourceIds.length > 0 ? new Set(sourceIds) : null;
   const regions = normalizeRegions(advanced.regions);
-  if (!matchesRegion(member.ref.name, regions)) return false;
-
   const includeRe = compileRegex(advanced.includeRegex);
-  if (includeRe && !includeRe.test(member.ref.name)) return false;
   const excludeRe = compileRegex(advanced.excludeRegex);
-  if (excludeRe && excludeRe.test(member.ref.name)) return false;
 
-  return true;
+  return (member) => {
+    if (member.ref.kind !== "node") return true;
+    const node = nodeByName.get(member.ref.name);
+    if (!node) return false;
+    if (sourceIdSet && !getNodeSourceIds(node).some((id) => sourceIdSet.has(id))) return false;
+    if (!matchesRegion(member.ref.name, regions)) return false;
+    if (includeRe && !includeRe.test(member.ref.name)) return false;
+    if (excludeRe && excludeRe.test(member.ref.name)) return false;
+    return true;
+  };
+}
+
+const nodeIndexCache = new WeakMap<ParsedNode[], { nodeByName: Map<string, ParsedNode>; nodeNameSet: Set<string> }>();
+
+function getNodeIndex(nodes: ParsedNode[]) {
+  let index = nodeIndexCache.get(nodes);
+  if (!index) {
+    const nodeByName = new Map(nodes.map((node) => [node.name, node]));
+    index = { nodeByName, nodeNameSet: new Set(nodeByName.keys()) };
+    nodeIndexCache.set(nodes, index);
+  }
+  return index;
 }
 
 export function resolveProxyGroupMembers(options: ResolveProxyGroupMembersOptions): ResolveProxyGroupMembersResult {
   const advanced = normalizeProxyGroupAdvancedConfig(options.advanced);
-  const nodeByName = new Map(options.nodes.map((node) => [node.name, node]));
-  const nodeNameSet = new Set(nodeByName.keys());
+  const { nodeByName, nodeNameSet } = getNodeIndex(options.nodes);
   const moduleNameToId = new Map<string, string>();
   for (const [id, name] of Object.entries(options.moduleNames || {})) {
     const trimmed = name.trim();
@@ -324,53 +331,80 @@ export function resolveProxyGroupMembers(options: ResolveProxyGroupMembersOption
   };
 
   const defaultCandidates = buildMembersFromNames(options.defaultProxyNames || []);
-  const availableCandidates = buildMembersFromNames(options.availableProxyNames || options.defaultProxyNames || []);
-  const availableByKey = new Map(availableCandidates.map((member) => [member.key, member]));
-  const candidateMap = new Map(defaultCandidates.map((member) => [member.key, member]));
+  let availableCandidates: ProxyGroupResolvedMember[] | undefined;
+  const getAvailableCandidates = () =>
+    (availableCandidates ??= buildMembersFromNames(options.availableProxyNames || options.defaultProxyNames || []));
+  const hasMemberRules = Boolean(
+    advanced.extraMembers ||
+      advanced.excludedMembers ||
+      advanced.memberOrder ||
+      advanced.sourceIds ||
+      advanced.regions ||
+      advanced.includeRegex ||
+      advanced.excludeRegex
+  );
 
-  for (const ref of advanced.extraMembers || []) {
-    const member = availableByKey.get(getProxyGroupMemberKey(ref)) || buildMemberFromRef(ref, {
-      nodeNameSet,
-      moduleNames: options.moduleNames || {},
-      customGroupsById,
+  const applyMemberRules = () => {
+    let availableByKey: Map<string, ProxyGroupResolvedMember> | undefined;
+    const candidateMap = new Map(defaultCandidates.map((member) => [member.key, member]));
+
+    for (const ref of advanced.extraMembers || []) {
+      availableByKey ??= new Map(getAvailableCandidates().map((member) => [member.key, member]));
+      const member = availableByKey.get(getProxyGroupMemberKey(ref)) || buildMemberFromRef(ref, {
+        nodeNameSet,
+        moduleNames: options.moduleNames || {},
+        customGroupsById,
+      });
+      if (!member || candidateMap.has(member.key)) continue;
+      if (options.self && member.key === `${options.self.kind}:${options.self.id}`) continue;
+      candidateMap.set(member.key, member);
+    }
+
+    const candidates = Array.from(candidateMap.values());
+    const extraKeys = new Set((advanced.extraMembers || []).map(getProxyGroupMemberKey));
+    const excludedKeys = new Set((advanced.excludedMembers || []).map(getProxyGroupMemberKey));
+    const passesFilters = createNodeFilter(nodeByName, advanced);
+    const includedBase = candidates.filter((member) => {
+      if (excludedKeys.has(member.key)) return false;
+      if (extraKeys.has(member.key)) return true;
+      return passesFilters(member);
     });
-    if (!member || candidateMap.has(member.key)) continue;
-    if (options.self && member.key === `${options.self.kind}:${options.self.id}`) continue;
-    candidateMap.set(member.key, member);
-  }
 
-  const candidates = Array.from(candidateMap.values());
-  const extraKeys = new Set((advanced.extraMembers || []).map(getProxyGroupMemberKey));
-  const excludedKeys = new Set((advanced.excludedMembers || []).map(getProxyGroupMemberKey));
-  const includedBase = candidates.filter((member) => {
-    if (excludedKeys.has(member.key)) return false;
-    if (extraKeys.has(member.key)) return true;
-    return nodePassesAdvancedFilters(member, nodeByName, advanced);
-  });
+    const byKey = new Map(includedBase.map((member) => [member.key, member]));
+    const ordered: ProxyGroupResolvedMember[] = [];
+    const used = new Set<string>();
+    for (const ref of advanced.memberOrder || []) {
+      const key = getProxyGroupMemberKey(ref);
+      const member = byKey.get(key);
+      if (!member || used.has(key)) continue;
+      used.add(key);
+      ordered.push(member);
+    }
+    for (const member of includedBase) {
+      if (used.has(member.key)) continue;
+      used.add(member.key);
+      ordered.push(member);
+    }
+    return { candidates, ordered };
+  };
 
-  const byKey = new Map(includedBase.map((member) => [member.key, member]));
-  const ordered: ProxyGroupResolvedMember[] = [];
-  const used = new Set<string>();
-  for (const ref of advanced.memberOrder || []) {
-    const key = getProxyGroupMemberKey(ref);
-    const member = byKey.get(key);
-    if (!member || used.has(key)) continue;
-    used.add(key);
-    ordered.push(member);
-  }
-  for (const member of includedBase) {
-    if (used.has(member.key)) continue;
-    used.add(member.key);
-    ordered.push(member);
-  }
+  const { candidates, ordered } = hasMemberRules
+    ? applyMemberRules()
+    : { candidates: defaultCandidates, ordered: defaultCandidates };
 
-  const includedKeys = new Set(ordered.map((member) => member.key));
-  const excludedSource = availableCandidates.length > 0 ? availableCandidates : candidates;
-  const excluded = excludedSource.filter((member) => !includedKeys.has(member.key));
-
+  let excluded: ProxyGroupResolvedMember[] | undefined;
   return {
     included: ordered,
-    excluded,
+    // Only UI callers need this; the generator reads proxyNames alone.
+    get excluded() {
+      if (!excluded) {
+        const includedKeys = new Set(ordered.map((member) => member.key));
+        const available = getAvailableCandidates();
+        const excludedSource = available.length > 0 ? available : candidates;
+        excluded = excludedSource.filter((member) => !includedKeys.has(member.key));
+      }
+      return excluded;
+    },
     proxyNames: ordered.map((member) => member.name),
   };
 }
