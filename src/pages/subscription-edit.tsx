@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { GroupPicker } from "@/components/group-picker";
 import { PageHeader, Panel, PanelTitle } from "@/components/kit";
+import { NodeRulesPanel } from "@/components/node-rules-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ import { INTERVAL_OPTIONS } from "@/lib/format";
 import { MODE_META, TEMPLATE_LABEL } from "@/lib/modes";
 import { sourceLabel, sourcesToText, textToSources, type Source } from "@/lib/sources";
 import { cn } from "@/lib/utils";
+import { applyNodeRules, EMPTY_NODE_RULES, regexError, type NodeRules } from "../../worker/lib/node-rules";
 
 type Mode = SubscriptionInput["mode"];
 type TemplateId = SubscriptionInput["config"]["template"];
@@ -98,6 +100,7 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
   const [name, setName] = useState(initial?.name ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
   const [userAgent, setUserAgent] = useState(initial?.config.userAgent ?? "");
+  const [nodeRules, setNodeRules] = useState<NodeRules>(initial?.config.nodeRules ?? EMPTY_NODE_RULES);
   const [text, setText] = useState(initial ? sourcesToText(initial.config.sources) : "");
   const [mode, setMode] = useState<Mode>(initial?.mode ?? "provider");
   const [template, setTemplate] = useState<TemplateId>(initial?.config.template ?? "standard");
@@ -125,9 +128,14 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
     previewMutation.mutate({ mode, sources, userAgent: userAgent.trim() || undefined }, { onSuccess: setPreview, onError: (e) => toast.error(e.message) });
   };
 
+  const renameRules = nodeRules.rename.filter((r) => r.pattern);
+  const rulesValid = renameRules.every((r) => !regexError(r.pattern));
+  const effectiveRules: NodeRules = { ...nodeRules, rename: renameRules };
+
   const submit = () => {
     if (sources.length === 0) return toast.error("请至少填写一个订阅链接或节点");
     if (sources.length > 20) return toast.error("最多支持 20 个订阅链接");
+    if (!rulesValid) return toast.error("节点处理中有无效的正则");
     const input: SubscriptionInput = {
       name: name.trim() || (urlCount > 0 ? sourceLabel(sources[0]) : "我的订阅"),
       note: note.trim(),
@@ -138,6 +146,7 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
         template,
         ...(templateId ? { templateId } : customGroups ? { enabledGroups: customGroups } : {}),
         ...(userAgent.trim() ? { userAgent: userAgent.trim() } : {}),
+        ...(renameRules.length > 0 || nodeRules.sort !== "none" ? { nodeRules: effectiveRules } : {}),
       },
     };
     save.mutate(
@@ -275,6 +284,8 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
           )}
         </Panel>
 
+        <NodeRulesPanel value={nodeRules} onChange={setNodeRules} clientPulled={mode === "provider" && urlCount > 0} />
+
         <Panel>
           <PanelTitle icon={ListTreeIcon} title="规则模板" description="决定生成哪些分流组和规则。" />
           <div className="grid gap-3 sm:grid-cols-3">
@@ -379,7 +390,14 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
         </div>
       </div>
 
-      <PreviewPanel sources={sources} preview={preview} pending={previewMutation.isPending} onPreview={runPreview} mode={mode} />
+      <PreviewPanel
+        sources={sources}
+        preview={preview}
+        pending={previewMutation.isPending}
+        onPreview={runPreview}
+        mode={mode}
+        rules={rulesValid ? effectiveRules : undefined}
+      />
     </div>
   );
 }
@@ -390,13 +408,20 @@ function PreviewPanel({
   pending,
   onPreview,
   mode,
+  rules,
 }: {
   sources: Source[];
   preview: PreviewResult | null;
   pending: boolean;
   onPreview: () => void;
   mode: Mode;
+  rules?: NodeRules;
 }) {
+  const nodes = useMemo(() => {
+    const list = preview?.nodes.map((n) => ({ ...n, originName: n.name })) ?? [];
+    return applyNodeRules(list, rules);
+  }, [preview, rules]);
+
   return (
     <Panel className="flex flex-col lg:sticky lg:top-6 lg:max-h-[calc(100svh-3rem)]">
       <PanelTitle
@@ -439,12 +464,15 @@ function PreviewPanel({
 
       <div className="-mx-2 min-h-40 flex-1 overflow-y-auto">
         {preview ? (
-          preview.nodes.length > 0 ? (
+          nodes.length > 0 ? (
             <ul className="space-y-0.5">
-              {preview.nodes.map((n, i) => (
+              {nodes.map((n, i) => (
                 <li key={`${n.name}-${i}`} className="flex items-center gap-3 rounded-xl px-2 py-1.5 text-sm hover:bg-muted/60">
                   <span className="w-16 shrink-0 font-mono text-[11px] text-muted-foreground uppercase">{n.type}</span>
-                  <span className="min-w-0 flex-1 truncate" title={n.name}>
+                  <span
+                    className="min-w-0 flex-1 truncate"
+                    title={n.name === n.originName ? n.name : `${n.name}\n原名：${n.originName}`}
+                  >
                     {n.name}
                   </span>
                 </li>

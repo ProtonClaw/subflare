@@ -2,6 +2,7 @@ import type { ParsedNode } from "@subboost/core/types/node";
 import type { SubscriptionUserInfo } from "@subboost/core/subscription/subscription-userinfo";
 import { and, desc, eq, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import type { NodeRules } from "../lib/node-rules";
 import { pullLogs, pullStats, retiredTokens, subscriptions } from "./schema";
 
 export type SourceType = "url" | "nodes";
@@ -26,6 +27,8 @@ export type SubscriptionConfig = {
   deletedNodes?: DeletedNode[];
   /** User-Agent for fetching URL sources; defaults to a Clash client UA. */
   userAgent?: string;
+  /** Rename / sort rules applied when generating the config, so new nodes follow them too. */
+  nodeRules?: NodeRules;
 };
 
 export type SubscriptionMode = "provider" | "snapshot";

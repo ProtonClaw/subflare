@@ -17,6 +17,7 @@ Self-hosted Clash / Mihomo subscription converter and manager that runs entirely
   - **Cloud snapshot**: the Worker fetches and parses nodes, shows traffic / expiry, and refreshes on a Cron schedule
 - One link per subscription, QR code, one-click import into Clash / Stash, link rotation
 - Overview: traffic / expiry summary, 7-day pull trend by client, and alerts for failed refreshes, expiring plans or unused links
+- Saved node rules: regex rename (also applied client-side via proxy-providers `override.proxy-name`) and sort by region / name
 - Per-subscription notes and fetch User-Agent; JSON backup / restore (portable between Cloudflare and Docker)
 - Single-admin token login (HttpOnly session cookie or `Authorization: Bearer`)
 

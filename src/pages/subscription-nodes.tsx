@@ -141,6 +141,11 @@ function NodeManager({ sub, state }: { sub: SubscriptionDetail; state: NodeState
           当前是「客户端拉取」模式：订阅链接里的节点由客户端直接获取，这里只能管理手动粘贴的节点。
         </Panel>
       )}
+      {sub.config.nodeRules && (
+        <Panel className="text-sm text-muted-foreground">
+          这里显示的是改名规则套用前的名称；生成订阅时还会按「编辑订阅 → 节点处理」中的规则改名和排序。
+        </Panel>
+      )}
 
       <Panel>
         <PanelTitle

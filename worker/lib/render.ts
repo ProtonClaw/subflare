@@ -3,7 +3,10 @@ import { buildGenerateOptionsFromConfig } from "@subboost/core/subscription/conf
 import type { SubBoostTemplateConfig } from "@subboost/core/types/template-config";
 import type { Subscription } from "../db/repo";
 import { createD1TemplateRepository } from "../db/templates-repo";
+import { applyNodeRules, isPortableToMihomo, type NodeRules } from "./node-rules";
 import { normalizeSourceUrl } from "./sources";
+
+type GenerateOptions = ReturnType<typeof buildGenerateOptionsFromConfig>;
 
 const cacheKey = (token: string) => `yaml:${token}`;
 
@@ -41,9 +44,25 @@ function hasProviderSources(sub: Renderable): boolean {
   return sub.mode === "provider" && sub.config.sources.some((s) => s.type === "url" && normalizeSourceUrl(s.content));
 }
 
+/** Lets the client apply portable rename rules to nodes it pulls through proxy-providers. */
+function withProviderRenames(options: GenerateOptions, rules: NodeRules | undefined): GenerateOptions {
+  const portable = (rules?.rename ?? []).filter((rule) => isPortableToMihomo(rule.pattern));
+  if (!options.proxyProviders || portable.length === 0) return options;
+  const proxyName = portable.map((rule) => ({ pattern: rule.pattern, target: rule.replace }));
+  const proxyProviders = Object.fromEntries(
+    Object.entries(options.proxyProviders).map(([name, provider]) => [
+      name,
+      { ...(provider as Record<string, unknown>), override: { "proxy-name": proxyName } },
+    ])
+  );
+  return { ...options, proxyProviders };
+}
+
 export function renderYaml(sub: Renderable, template: SubBoostTemplateConfig | null): string | null {
   if (sub.nodes.length === 0 && !hasProviderSources(sub)) return null;
-  return generateClashYaml(buildGenerateOptionsFromConfig(toCoreConfig(sub, template), { nodes: sub.nodes }));
+  const rules = sub.config.nodeRules;
+  const options = buildGenerateOptionsFromConfig(toCoreConfig(sub, template), { nodes: applyNodeRules(sub.nodes, rules) });
+  return generateClashYaml(withProviderRenames(options, rules));
 }
 
 export async function loadTemplateConfig(db: D1Database, sub: Pick<Subscription, "config">) {

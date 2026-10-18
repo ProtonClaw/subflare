@@ -40,6 +40,27 @@ const UserAgentSchema = z
   .optional()
   .transform((value) => value || undefined);
 
+function isValidRegex(pattern: string): boolean {
+  try {
+    new RegExp(pattern, "g");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const NodeRulesSchema = z.object({
+  rename: z
+    .array(
+      z.object({
+        pattern: z.string().min(1).max(200).refine(isValidRegex, "改名规则中的正则无效"),
+        replace: z.string().max(200),
+      })
+    )
+    .max(20),
+  sort: z.enum(["none", "region", "name"]),
+});
+
 const SubscriptionInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
   note: z.string().trim().max(500).default(""),
@@ -50,6 +71,7 @@ const SubscriptionInputSchema = z.object({
     enabledGroups: z.array(z.string().max(64)).max(200).optional(),
     templateId: z.string().min(1).max(64).optional(),
     userAgent: UserAgentSchema,
+    nodeRules: NodeRulesSchema.optional(),
   }),
   autoUpdateInterval: z.number().int().min(1800).max(7 * 86400).nullable(),
 });
