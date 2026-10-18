@@ -118,16 +118,12 @@ function Overview({ subs, now }: { subs: SubscriptionSummary[]; now: number }) {
             "云端快照模式才能获取流量信息"
           )}
         </StatCard>
-        <div className="flex flex-col rounded-3xl bg-primary p-6 text-primary-foreground shadow-sm">
-          <div className="flex items-center gap-2 text-sm opacity-90">
-            <ActivityIcon className="size-4" /> 今日拉取
-          </div>
-          <BigNumber className="mt-4">{pulls.data ? today : "—"}</BigNumber>
-          <div className="mt-auto flex justify-between pt-4 text-xs opacity-80">
+        <StatCard icon={ActivityIcon} label="今日拉取" value={pulls.data ? today : "—"}>
+          <div className="flex justify-between">
             <span>近 7 天 {week}</span>
             <span>近 30 天 {month}</span>
           </div>
-        </div>
+        </StatCard>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-3">
@@ -204,12 +200,10 @@ function StatCard({
   return (
     <Panel className="flex flex-col">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="grid size-7 place-items-center rounded-lg bg-accent text-accent-foreground">
-          <Icon className="size-3.5" />
-        </span>
+        <Icon className="size-4" />
         {label}
       </div>
-      <BigNumber className="mt-4">{value}</BigNumber>
+      <BigNumber className="mt-3">{value}</BigNumber>
       <div className="mt-auto pt-4 text-xs text-muted-foreground">{children}</div>
     </Panel>
   );

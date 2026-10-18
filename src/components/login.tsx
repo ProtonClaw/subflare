@@ -28,7 +28,7 @@ export function LoginScreen({ configured }: { configured: boolean }) {
           <p className="mt-3 text-muted-foreground">运行在 Cloudflare 上的 Clash / Mihomo 订阅管理</p>
         </div>
 
-        <div className="rounded-3xl bg-card p-7 shadow-[0_1px_2px_oklch(0_0_0/0.04)]">
+        <div className="rounded-3xl border bg-card p-7">
           {configured ? (
             <form onSubmit={submit} className="space-y-4">
               <div className="relative">

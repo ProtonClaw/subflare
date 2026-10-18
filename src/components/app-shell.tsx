@@ -62,13 +62,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="px-5 pt-6 pb-4">
+      <div className="px-5 pt-5 pb-3">
         <Link href="/" onClick={onNavigate}>
           <Logo />
         </Link>
       </div>
 
-      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-2">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-2">
         {NAV.map((section) => (
           <div key={section.group}>
             <div className="px-3 pb-2 text-xs font-medium text-muted-foreground">{section.group}</div>
@@ -81,16 +81,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                       href={item.href}
                       onClick={onNavigate}
                       className={cn(
-                        "flex items-center gap-3 rounded-full px-3 py-2 text-sm transition-colors",
+                        "flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition-colors",
                         active
-                          ? "bg-sidebar-primary font-medium text-sidebar-primary-foreground shadow-sm"
+                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground [&>svg]:text-primary"
                           : "text-sidebar-foreground hover:bg-sidebar-accent"
                       )}
                     >
                       <item.icon className="size-4" />
                       <span className="flex-1">{item.label}</span>
                       {item.href === "/subscriptions" && subs.data && (
-                        <span className={cn("text-xs tabular-nums", active ? "opacity-80" : "text-muted-foreground")}>
+                        <span className="text-xs text-muted-foreground tabular-nums">
                           {subs.data.length}
                         </span>
                       )}
@@ -143,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-svh">
-      <aside className="fixed inset-y-3 left-3 z-30 hidden w-60 overflow-hidden rounded-3xl bg-sidebar shadow-[0_1px_2px_oklch(0_0_0/0.04)] lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 overflow-hidden border-r bg-sidebar lg:block">
         <SidebarContent />
       </aside>
 
@@ -161,8 +161,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SheetContent>
       </Sheet>
 
-      <main className="lg:pl-[16.5rem]">
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:py-12">{children}</div>
+      <main className="lg:pl-60">
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-8 lg:py-8">{children}</div>
       </main>
     </div>
   );

@@ -15,12 +15,12 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-8 space-y-3">
+    <div className="mb-6 space-y-3 border-b pb-5">
       {back}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-3xl font-semibold tracking-tight">{title}</h1>
-          {description && <p className="mt-1.5 text-muted-foreground">{description}</p>}
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
         </div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
@@ -29,7 +29,7 @@ export function PageHeader({
 }
 
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
-  return <section className={cn("rounded-3xl bg-card p-6 shadow-[0_1px_2px_oklch(0_0_0/0.04)]", className)}>{children}</section>;
+  return <section className={cn("rounded-3xl border bg-card p-5", className)}>{children}</section>;
 }
 
 export function PanelTitle({
@@ -44,14 +44,10 @@ export function PanelTitle({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-5 flex items-start justify-between gap-3">
+    <div className="mb-4 flex items-start justify-between gap-3">
       <div className="min-w-0">
         <h2 className="flex items-center gap-2 font-medium">
-          {Icon && (
-            <span className="grid size-7 place-items-center rounded-lg bg-accent text-accent-foreground">
-              <Icon className="size-3.5" />
-            </span>
-          )}
+          {Icon && <Icon className="size-4 text-muted-foreground" />}
           {title}
         </h2>
         {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
@@ -79,7 +75,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           className={cn(
             "rounded-full px-3 py-1 font-medium text-muted-foreground transition-colors",
-            value === o.value ? "bg-primary text-primary-foreground shadow-sm" : "hover:text-foreground"
+            value === o.value ? "bg-card text-foreground shadow-sm" : "hover:text-foreground"
           )}
         >
           {o.label}
@@ -90,7 +86,7 @@ export function Segmented<T extends string>({
 }
 
 export function BigNumber({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("font-display text-4xl leading-none tracking-tight tabular-nums", className)}>{children}</div>;
+  return <div className={cn("text-3xl leading-none font-semibold tracking-tight tabular-nums", className)}>{children}</div>;
 }
 
 export function StatusDot({ tone }: { tone: "ok" | "warn" | "error" }) {
