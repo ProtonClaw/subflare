@@ -6,8 +6,8 @@ SubFlare 完全运行在 Cloudflare 上，**免费套餐即可使用**，不需�
 
 | 方式 | 适合谁 | 需要准备 |
 |---|---|---|
-| [方式一：一键部署](#方式一一键部署推荐) | 第一次用、不想碰命令行 | Cloudflare 账号 + GitHub 账号 |
-| [方式二：手动部署](#方式二手动部署命令行) | 熟悉命令行、想自己掌控代码 | Cloudflare 账号 + 一台装了 Node.js 22+ 的电脑 |
+| [方式一：网页一键部署](#方式一网页一键部署推荐) | 第一次用、不想碰命令行 | Cloudflare 账号 + GitHub 账号 |
+| [方式二：命令行一键部署](#方式二命令行一键部署) | 有电脑或服务器、习惯命令行 | Cloudflare 账号 + Cloudflare API Token + 装了 Node.js 22+ 的电脑 |
 
 部署完成后，请继续看 [部署后：第一次使用](#部署后第一次使用) 和 [绑定自定义域名](#绑定自定义域名国内访问必看)。
 
@@ -19,7 +19,7 @@ SubFlare 完全运行在 Cloudflare 上，**免费套餐即可使用**，不需�
 
 1. **Cloudflare 账号**：在 <https://dash.cloudflare.com/sign-up> 免费注册。
 2. **GitHub 账号**（仅方式一需要）：在 <https://github.com/signup> 免费注册。
-3. **准备一个登录令牌**：这是你登录 SubFlare 后台的唯一密码。
+3. **准备一个登录令牌**（方式二可以不准备，脚本会自动生成）：这是你登录 SubFlare 后台的唯一密码。
    - 至少 8 位，建议 32 位随机字符，**不要使用示例里的 `change-me-please`**。
    - 生成方法（任选一种）：
      - macOS / Linux 终端：`openssl rand -hex 16`
@@ -28,7 +28,7 @@ SubFlare 完全运行在 Cloudflare 上，**免费套餐即可使用**，不需�
 
 ---
 
-## 方式一：一键部署（推荐）
+## 方式一：网页一键部署（推荐）
 
 ### 第 1 步：点击部署按钮
 
@@ -70,7 +70,7 @@ https://subflare.<你的子域>.workers.dev
 
 接下来请跳到 [部署后：第一次使用](#部署后第一次使用)。
 
-### 以后如何更新（一键部署用户）
+### 以后如何更新（网页部署用户）
 
 一键部署创建的是**你自己的独立仓库**（不是 fork），并且已经连接了 Cloudflare 自动构建：**只要你的仓库 `main` 分支有新提交，Cloudflare 就会自动重新部署**，数据库迁移也会自动执行，数据不会丢失。
 
@@ -88,7 +88,9 @@ git push origin main
 
 ---
 
-## 方式二：手动部署（命令行）
+## 方式二：命令行一键部署
+
+准备好一个 Cloudflare API Token，一条命令完成全部部署：安装依赖、构建、创建数据库、初始化表、设置登录令牌。**同一条命令重复运行就是更新**，数据和登录令牌都会保留。
 
 ### 第 1 步：安装 Node.js 和 Git
 
@@ -102,69 +104,102 @@ node -v   # 应显示 v22.x.x 或更高
 git --version
 ```
 
-### 第 2 步：下载代码并安装依赖
+### 第 2 步：创建 Cloudflare API Token
+
+1. 打开 <https://dash.cloudflare.com/profile/api-tokens>，点击 **Create Token**（创建令牌）；
+2. 拉到最下面，选择 **Create Custom Token**（创建自定义令牌）→ **Get started**；
+3. **Token name** 随便填，比如 `subflare-deploy`；
+4. **Permissions**（权限）添加以下 4 行，左边都选 **Account**（账户）：
+
+   | 资源 | 权限 |
+   |---|---|
+   | Workers Scripts | Edit |
+   | D1 | Edit |
+   | Workers KV Storage | Edit |
+   | Account Settings | Read |
+
+5. **Account Resources**（账户资源）选 **Include → 你的账户**；
+6. 点击 **Continue to summary** → **Create Token**，**复制显示的 Token**（只显示一次）。
+
+> 请用 API Token，不要用 Global API Key：Global API Key 拥有整个账号的全部权限，泄露后果严重。
+
+### 第 3 步：下载代码
 
 ```bash
 git clone https://github.com/ProtonClaw/subflare.git
 cd subflare
-npm install
 ```
 
 > 国内下载依赖慢，可以先执行 `npm config set registry https://registry.npmmirror.com` 切换到国内镜像。
 
-### 第 3 步：登录 Cloudflare
+### 第 4 步：填写配置并部署
 
-```bash
-npx wrangler login
+在 `subflare` 目录下新建一个名为 **`.env.deploy`** 的文件（注意开头有个点），内容如下：
+
+```ini
+# 必填：第 2 步创建的 API Token
+CLOUDFLARE_API_TOKEN=粘贴你的 Token
+# 可选：后台登录令牌（至少 8 位）。不填则自动生成一个，并在部署完成时显示
+# SUBFLARE_TOKEN=
+# 可选：只有你的 Cloudflare 登录下有多个账户时才需要，在后台首页右侧可以看到 Account ID
+# CLOUDFLARE_ACCOUNT_ID=
 ```
 
-浏览器会自动打开 Cloudflare 授权页面，点击 **Allow**（允许）。终端显示 `Successfully logged in` 即成功。
+> `.env.deploy` 已被 git 忽略，不会被提交。把配置写在文件里，也能避免 Token 留在终端历史记录中。
 
-> 在没有浏览器的服务器上：改用 API Token。在 Cloudflare 后台 **My Profile → API Tokens → Create Token** 使用 **Edit Cloudflare Workers** 模板创建，并额外勾选 **D1 Edit** 权限，然后执行 `export CLOUDFLARE_API_TOKEN=<你的 token>`。
-
-### 第 4 步：部署
+然后执行：
 
 ```bash
-npm run deploy
+npm run setup
 ```
 
-这一条命令会依次完成：
-
-1. 构建前端和 Worker；
-2. 上传 Worker，并**自动创建** D1 数据库（名为 `subflare`）和 KV 命名空间；
-3. 在远程数据库上创建所需的表。
-
-可能遇到的交互提示：
-
-- 如果是第一次在这个 Cloudflare 账号上使用 Workers，会提示你注册一个 `workers.dev` 子域，输入一个喜欢的名字即可（比如你的用户名）。
-- 如果提示 “Ok to proceed?”，输入 `y` 回车。
-
-成功后终端会输出访问地址，形如：
+脚本会依次显示 `[1/3] 安装依赖`、`[2/3] 构建并部署`、`[3/3] 设置登录令牌`，整个过程约 1～3 分钟。成功后会输出：
 
 ```text
-https://subflare.<你的子域>.workers.dev
+✅ 部署完成
+   访问地址：https://subflare.<你的子域>.workers.dev
+   登录令牌：xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 第 5 步：设置登录令牌
+- **登录令牌只在自动生成时显示这一次，请立即保存。**
+- 令牌生效需要几十秒，如果马上登录提示 “SUBFLARE_TOKEN 未配置”，等半分钟再试。
 
-```bash
-npx wrangler secret put SUBFLARE_TOKEN
-```
-
-提示 `Enter a secret value:` 时，粘贴你在准备工作里生成的令牌，回车。看到 `Success! Uploaded secret SUBFLARE_TOKEN` 即成功。
-
-> 令牌生效需要几十秒。如果马上登录提示 “SUBFLARE_TOKEN 未配置”，等半分钟刷新即可。
-
-### 以后如何更新（手动部署用户）
+### 以后如何更新
 
 ```bash
 cd subflare
 git pull
-npm install
-npm run deploy
+npm run setup
 ```
 
-`npm run deploy` 每次都会自动执行新的数据库迁移，已有数据不会丢失，登录令牌也会保留。
+数据库会自动迁移，已有数据不会丢失；没有填写 `SUBFLARE_TOKEN` 时，线上已有的登录令牌保持不变。
+
+### 部署失败怎么办
+
+脚本失败时会给出提示，最常见的原因：
+
+| 报错现象 | 解决方法 |
+|---|---|
+| 提示权限不足（Authentication error / 10000） | 检查 API Token 是否包含上面 4 项权限，且账户资源选了你的账户 |
+| 提示有多个账户（More than one account） | 在 `.env.deploy` 中填写 `CLOUDFLARE_ACCOUNT_ID` |
+| 提示需要注册 workers.dev 子域 | 全新账号需要先在网页后台打开一次 **Workers & Pages** 页面，系统会分配子域，然后重新运行 |
+| `npm install` 很慢或失败 | 切换国内镜像：`npm config set registry https://registry.npmmirror.com` |
+
+<details>
+<summary>进阶：不使用脚本，手动分步执行</summary>
+
+`npm run setup` 本质上只是依次执行下面几步。想弄清楚每一步做了什么，或者想用浏览器授权代替 API Token，可以手动执行：
+
+```bash
+npm install
+npx wrangler login                       # 浏览器授权登录（已设置 CLOUDFLARE_API_TOKEN 时可跳过）
+npm run deploy                           # 构建 → 部署（首次自动创建 D1 和 KV）→ 执行数据库迁移
+npx wrangler secret put SUBFLARE_TOKEN   # 按提示粘贴登录令牌
+```
+
+交互模式下可能出现的提示：第一次使用 Workers 会要求注册 `workers.dev` 子域，输入一个名字即可；数据库迁移提示 “Ok to proceed?” 时输入 `y`。
+
+</details>
 
 ---
 
@@ -214,10 +249,10 @@ npm run deploy
 ## 常见问题
 
 **Q：登录时提示 “SUBFLARE_TOKEN 未配置”**
-A：没有设置令牌，或刚设置还没生效。一键部署用户在 Cloudflare 后台 Worker → **Settings → Variables and Secrets** 中检查是否有 `SUBFLARE_TOKEN`；手动部署用户重新执行第 5 步。设置后等半分钟再试。
+A：没有设置令牌，或刚设置还没生效。网页部署用户在 Cloudflare 后台 Worker → **Settings → Variables and Secrets** 中检查是否有 `SUBFLARE_TOKEN`；命令行部署用户重新运行 `npm run setup`。设置后等半分钟再试。
 
 **Q：忘记登录令牌了**
-A：令牌无法找回，但可以重新设置：手动部署执行 `npx wrangler secret put SUBFLARE_TOKEN`；一键部署在 Worker → **Settings → Variables and Secrets** 中编辑 `SUBFLARE_TOKEN`。已生成的订阅链接不受影响。
+A：令牌无法找回，但可以重新设置：命令行部署在 `.env.deploy` 中填写新的 `SUBFLARE_TOKEN=` 后运行 `npm run setup`；网页部署在 Worker → **Settings → Variables and Secrets** 中编辑 `SUBFLARE_TOKEN`。已生成的订阅链接不受影响。
 
 **Q：剩余流量 / 到期时间显示 “—”**
 A：只有 **云端快照** 模式能获取（来自机场返回的 `subscription-userinfo` 信息）；客户端拉取模式下由客户端自己显示。如果机场返回的总流量为 0，会显示为“不限量”。
