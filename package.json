@@ -4,6 +4,19 @@
   "version": "0.0.0",
   "license": "AGPL-3.0-only",
   "type": "module",
+  "cloudflare": {
+    "bindings": {
+      "SUBFLARE_TOKEN": {
+        "description": "后台登录令牌（至少 8 位），请换成一串只有你知道的随机字符，例如在终端运行 `openssl rand -hex 16` 生成。部署后用它登录控制台。"
+      },
+      "DB": {
+        "description": "D1 数据库，保存订阅、模板和拉取记录。保持默认即可，会自动创建。"
+      },
+      "KV": {
+        "description": "KV 命名空间，缓存生成好的配置。保持默认即可，会自动创建。"
+      }
+    }
+  },
   "scripts": {
     "gen:parsers": "node scripts/build-peggy.mjs",
     "predev": "npm run gen:parsers",
@@ -12,7 +25,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "npm run build && vite preview",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy && npm run db:migrate:remote",
     "cf-typegen": "wrangler types",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
