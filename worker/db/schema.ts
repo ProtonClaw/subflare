@@ -71,6 +71,13 @@ export const pullLogs = sqliteTable(
 );
 
 /** Tokens replaced by rotation, so pulls with an old link can still be attributed. */
+/** Failed admin-token attempts per client IP, for login rate limiting. */
+export const authFailures = sqliteTable("auth_failures", {
+  ip: text("ip").primaryKey(),
+  count: integer("count").notNull(),
+  resetAt: integer("reset_at").notNull(),
+});
+
 export const retiredTokens = sqliteTable(
   "retired_tokens",
   {

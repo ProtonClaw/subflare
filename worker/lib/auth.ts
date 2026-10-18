@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sign, verify } from "hono/jwt";
+import { authRetryAfter, recordAuthFailure } from "./rate-limit";
 
 export const SESSION_COOKIE = "sf_session";
 const SESSION_TTL_SECONDS = 30 * 24 * 3600;
@@ -54,12 +55,31 @@ export async function isAuthenticated(c: Context<AuthEnv>, siteToken: string): P
   }
 }
 
+export function clientIp(c: Context<AuthEnv>): string {
+  return c.req.header("cf-connecting-ip") ?? "unknown";
+}
+
+export function tooManyAttempts(c: Context<AuthEnv>, retryAfter: number) {
+  c.header("Retry-After", String(retryAfter));
+  return c.json(
+    { ok: false as const, error: `尝试次数过多，请 ${Math.ceil(retryAfter / 60)} 分钟后再试`, code: "RATE_LIMITED" as const },
+    429
+  );
+}
+
 export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const siteToken = getSiteToken(c.env);
   if (!siteToken) {
     return c.json({ error: "SUBFLARE_TOKEN is not configured", code: "NOT_CONFIGURED" }, 503);
   }
+  // Bearer tokens are guessable like the login form, so they share its rate limit.
+  const usesBearer = /^Bearer\s/i.test(c.req.header("authorization") ?? "");
+  if (usesBearer) {
+    const retryAfter = await authRetryAfter(c.env.DB, clientIp(c));
+    if (retryAfter !== null) return tooManyAttempts(c, retryAfter);
+  }
   if (!(await isAuthenticated(c, siteToken))) {
+    if (usesBearer) await recordAuthFailure(c.env.DB, clientIp(c));
     return c.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, 401);
   }
   await next();

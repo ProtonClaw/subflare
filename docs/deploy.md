@@ -236,10 +236,12 @@ SUBFLARE_TOKEN=换成你的令牌
 ### 第 3 步：启动
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-首次需要构建镜像，约 1～3 分钟。完成后检查状态：
+会自动拉取预构建镜像 `ghcr.io/protonclaw/subflare`（支持 amd64 / arm64，约 50MB）。如果服务器拉取 ghcr.io 太慢，可以改为在本机从源码构建：`docker compose up -d --build`（约 1～3 分钟）。
+
+完成后检查状态：
 
 ```bash
 docker compose ps        # STATUS 显示 healthy 即正常
@@ -260,7 +262,7 @@ sub.example.com {
 }
 ```
 
-**Nginx**：必须传递以下请求头，否则登录后的保存操作会被拒绝，拉取记录里的 IP 也会不正确：
+**Nginx**：必须传递以下请求头，否则登录后的保存操作会被拒绝，拉取记录里的 IP 也会不正确（登录限速也会把所有访问者当成同一个 IP）：
 
 ```nginx
 location / {
@@ -272,15 +274,18 @@ location / {
 }
 ```
 
-使用反向代理后，建议把 `docker-compose.yml` 中的端口改为 `"127.0.0.1:8787:8787"`，只允许本机访问。
+使用反向代理后，建议把 `docker-compose.yml` 中的端口改为 `"127.0.0.1:8787:8787"`，只允许本机访问。SubFlare 会信任 `X-Real-IP` / `X-Forwarded-For` 请求头，如果端口直接暴露在公网，访问者可以伪造 IP 绕过登录限速。
 
 ### 更新
 
 ```bash
 cd subflare
 git pull
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+（从源码构建的用户：`git pull` 后执行 `docker compose up -d --build`。）
 
 启动时会自动执行数据库迁移，数据不会丢失。
 

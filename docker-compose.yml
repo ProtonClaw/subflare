@@ -4,7 +4,8 @@ services:
       context: .
       args:
         BUILD_COMMIT: ${BUILD_COMMIT:-docker}
-    image: subflare:local
+    # Prebuilt multi-arch image; `docker compose up -d --build` builds from source instead.
+    image: ghcr.io/protonclaw/subflare:latest
     container_name: subflare
     restart: unless-stopped
     ports:

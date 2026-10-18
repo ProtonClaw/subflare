@@ -64,7 +64,8 @@ Runs the same Worker code on Node.js with SQLite (`node:sqlite`) — no Cloudfla
 
 ```bash
 echo "SUBFLARE_TOKEN=<login token>" > .env
-docker compose up -d --build   # http://localhost:8787, data in the subflare-data volume
+docker compose up -d   # ghcr.io/protonclaw/subflare (amd64/arm64); add --build to build from source
+                       # http://localhost:8787, data in the subflare-data volume
 ```
 
 ## License

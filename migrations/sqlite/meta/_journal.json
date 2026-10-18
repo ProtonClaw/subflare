@@ -43,6 +43,13 @@
       "when": 1792330371969,
       "tag": "0005_premium_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792331668633,
+      "tag": "0006_large_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

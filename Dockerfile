@@ -7,7 +7,8 @@ ARG ALPINE_VERSION=3.24
 
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS node
 
-FROM node:${NODE_VERSION}-slim AS build
+# The build output is plain JS + static files, so build natively instead of under QEMU for other arches.
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-slim AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
