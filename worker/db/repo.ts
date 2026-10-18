@@ -18,6 +18,8 @@ export type SubscriptionConfig = {
   sources: Source[];
   template: TemplateId;
   enabledGroups?: string[];
+  /** Custom template reference; when set, `template` and `enabledGroups` are ignored. */
+  templateId?: string;
 };
 
 export type SubscriptionMode = "provider" | "snapshot";
@@ -28,6 +30,7 @@ export type Subscription = {
   token: string;
   mode: SubscriptionMode;
   config: SubscriptionConfig;
+  templateId: string | null;
   nodes: ParsedNode[];
   nodeCount: number;
   userinfo: SubscriptionUserInfo | null;
@@ -61,6 +64,7 @@ export interface SubscriptionRepository {
   rotateToken(id: string, token: string): Promise<string | null>;
   delete(id: string): Promise<Subscription | null>;
   listDueForRefresh(now: number, limit: number): Promise<Subscription[]>;
+  listByTemplate(templateId: string): Promise<Array<Pick<Subscription, "id" | "name" | "token">>>;
   recordPull(id: string, client: string, now: number): Promise<void>;
   listPullStats(sinceDay: string, subscriptionId?: string): Promise<PullStatRow[]>;
   prunePullStats(beforeDay: string): Promise<void>;
@@ -133,6 +137,7 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
           name: input.name,
           mode: input.mode,
           config: JSON.stringify(input.config),
+          templateId: input.config.templateId ?? null,
           autoUpdateInterval: input.autoUpdateInterval,
           ...refreshColumns(refresh, now),
           createdAt: now,
@@ -150,6 +155,7 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
           name: input.name,
           mode: input.mode,
           config: JSON.stringify(input.config),
+          templateId: input.config.templateId ?? null,
           autoUpdateInterval: input.autoUpdateInterval,
           ...refreshColumns(refresh, now),
           updatedAt: now,
@@ -196,6 +202,13 @@ export function createD1SubscriptionRepository(d1: D1Database): SubscriptionRepo
         .limit(limit)
         .all();
       return rows.map(toSubscription);
+    },
+    async listByTemplate(templateId) {
+      return db
+        .select({ id: subscriptions.id, name: subscriptions.name, token: subscriptions.token })
+        .from(subscriptions)
+        .where(eq(subscriptions.templateId, templateId))
+        .all();
     },
     async recordPull(id, client, now) {
       await db.batch([

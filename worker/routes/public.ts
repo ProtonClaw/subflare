@@ -8,7 +8,7 @@ export const publicRoutes = new Hono<{ Bindings: Env }>().get("/s/:token", async
   const repo = createD1SubscriptionRepository(c.env.DB);
   const sub = await repo.getByToken(c.req.param("token"));
   if (!sub) return c.text("Not Found", 404);
-  const yaml = await getCachedYaml(c.env.KV, sub);
+  const yaml = await getCachedYaml(c.env, sub);
   if (yaml === null) return c.text("No nodes available", 404);
   c.executionCtx.waitUntil(
     repo

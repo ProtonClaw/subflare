@@ -2,6 +2,7 @@ import {
   ArrowLeftIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
+  ChevronRightIcon,
   FileTextIcon,
   ListTreeIcon,
   Loader2Icon,
@@ -13,18 +14,18 @@ import {
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
+import { GroupPicker } from "@/components/group-picker";
 import { PageHeader, Panel, PanelTitle } from "@/components/kit";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { useMeta, usePreview, useSaveSubscription, useSubscription } from "@/hooks/use-api";
+import { useMeta, usePreview, useSaveSubscription, useSubscription, useTemplates } from "@/hooks/use-api";
 import type { Meta, PreviewResult, SubscriptionDetail, SubscriptionInput } from "@/lib/api";
 import { INTERVAL_OPTIONS } from "@/lib/format";
-import { MODE_META } from "@/lib/modes";
+import { MODE_META, TEMPLATE_LABEL } from "@/lib/modes";
 import { sourceLabel, sourcesToText, textToSources, type Source } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +90,7 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
   const [text, setText] = useState(initial ? sourcesToText(initial.config.sources) : "");
   const [mode, setMode] = useState<Mode>(initial?.mode ?? "provider");
   const [template, setTemplate] = useState<TemplateId>(initial?.config.template ?? "standard");
+  const [templateId, setTemplateId] = useState<string | null>(initial?.config.templateId ?? null);
   const [customGroups, setCustomGroups] = useState<string[] | null>(initial?.config.enabledGroups ?? null);
   const [interval, setIntervalValue] = useState<string>(
     initial?.autoUpdateInterval ? String(initial.autoUpdateInterval) : String(6 * 3600)
@@ -100,6 +102,7 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
 
   const previewMutation = usePreview();
   const save = useSaveSubscription();
+  const myTemplates = useTemplates();
 
   const sources = useMemo(() => textToSources(text, initial?.config.sources), [text, initial]);
   const urlCount = sources.filter((s) => s.type === "url").length;
@@ -118,7 +121,11 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
       name: name.trim() || (urlCount > 0 ? sourceLabel(sources[0]) : "我的订阅"),
       mode,
       autoUpdateInterval: mode === "snapshot" && interval !== "off" ? Number(interval) : null,
-      config: { sources, template, ...(customGroups ? { enabledGroups: customGroups } : {}) },
+      config: {
+        sources,
+        template,
+        ...(templateId ? { templateId } : customGroups ? { enabledGroups: customGroups } : {}),
+      },
     };
     save.mutate(
       { id: initial?.id, input },
@@ -133,14 +140,6 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
     );
   };
 
-  const toggleGroup = (groupId: string, checked: boolean) =>
-    setCustomGroups(checked ? [...enabledGroups, groupId] : enabledGroups.filter((g) => g !== groupId));
-
-  const categories = useMemo(() => {
-    const byCat = new Map<string, Meta["modules"]>();
-    for (const m of meta.modules) byCat.set(m.category, [...(byCat.get(m.category) ?? []), m]);
-    return [...byCat.entries()].sort(([a], [b]) => (meta.categories[a]?.order ?? 99) - (meta.categories[b]?.order ?? 99));
-  }, [meta]);
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[1fr_22rem]">
@@ -235,11 +234,12 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
                 type="button"
                 onClick={() => {
                   setTemplate(t.id as TemplateId);
+                  setTemplateId(null);
                   setCustomGroups(null);
                 }}
                 className={cn(
                   "rounded-2xl border-2 border-transparent bg-muted/60 p-4 text-left transition-all hover:bg-muted",
-                  template === t.id && "border-primary bg-accent/60 hover:bg-accent/60"
+                  !templateId && template === t.id && "border-primary bg-accent/60 hover:bg-accent/60"
                 )}
               >
                 <div className="flex items-baseline justify-between">
@@ -251,35 +251,70 @@ function EditorForm({ meta, initial, backHref }: { meta: Meta; initial?: Subscri
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowGroups((v) => !v)}
-            className="mt-5 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ChevronDownIcon className={cn("size-4 transition-transform", showGroups && "rotate-180")} />
-            自定义分流组（已启用 {enabledGroups.length} 个{customGroups ? "，已自定义" : ""}）
-          </button>
-          {showGroups && (
-            <div className="mt-4 space-y-5 rounded-2xl bg-muted/50 p-5">
-              {categories.map(([cat, modules]) => (
-                <div key={cat}>
-                  <div className="mb-2.5 text-xs font-medium text-muted-foreground">{meta.categories[cat]?.name ?? cat}</div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
-                    {modules.map((m) => (
-                      <label key={m.id} className="flex cursor-pointer items-center gap-2 text-sm" title={m.description}>
-                        <Checkbox checked={enabledGroups.includes(m.id)} onCheckedChange={(v) => toggleGroup(m.id, v === true)} />
-                        <span className="truncate">{m.name}</span>
-                      </label>
-                    ))}
-                  </div>
+          {(myTemplates.data?.length ?? 0) > 0 && (
+            <>
+              <div className="mt-6 mb-3 text-xs font-medium text-muted-foreground">我的模板</div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {myTemplates.data?.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setTemplate(t.base);
+                      setTemplateId(t.id);
+                      setCustomGroups(null);
+                    }}
+                    className={cn(
+                      "rounded-2xl border-2 border-transparent bg-muted/60 p-4 text-left transition-all hover:bg-muted",
+                      templateId === t.id && "border-primary bg-accent/60 hover:bg-accent/60"
+                    )}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate font-medium">{t.name}</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{t.groupCount} 组</span>
+                    </div>
+                    <div className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
+                      {t.description || `基于${TEMPLATE_LABEL[t.base]}版${t.customRuleCount ? `，${t.customRuleCount} 条自定义规则` : ""}`}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {templateId ? (
+            <Link
+              href={`/templates/${templateId}`}
+              className="mt-5 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+            >
+              分流组和规则由模板决定，去编辑模板 <ChevronRightIcon className="size-4" />
+            </Link>
+          ) : (
+            <>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGroups((v) => !v)}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDownIcon className={cn("size-4 transition-transform", showGroups && "rotate-180")} />
+                  自定义分流组（已启用 {enabledGroups.length} 个{customGroups ? "，已自定义" : ""}）
+                </button>
+                <Link href="/templates" className="text-sm text-muted-foreground hover:text-foreground">
+                  管理模板库
+                </Link>
+              </div>
+              {showGroups && (
+                <div className="mt-4 space-y-5 rounded-2xl bg-muted/50 p-5">
+                  <GroupPicker meta={meta} value={enabledGroups} onChange={setCustomGroups} />
+                  {customGroups && (
+                    <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setCustomGroups(null)}>
+                      恢复模板默认
+                    </Button>
+                  )}
                 </div>
-              ))}
-              {customGroups && (
-                <Button variant="link" size="sm" className="h-auto p-0" onClick={() => setCustomGroups(null)}>
-                  恢复模板默认
-                </Button>
               )}
-            </div>
+            </>
           )}
         </Panel>
 

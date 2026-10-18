@@ -12,6 +12,8 @@ export const subscriptions = sqliteTable("subscriptions", {
   token: text("token").notNull().unique(),
   mode: text("mode", { enum: ["provider", "snapshot"] }).notNull(),
   config: text("config").notNull(),
+  /** Mirrors config.templateId so template usage can be queried without JSON functions. */
+  templateId: text("template_id"),
   nodes: text("nodes").notNull().default("[]"),
   nodeCount: integer("node_count").notNull().default(0),
   userinfo: text("userinfo"),
@@ -20,6 +22,16 @@ export const subscriptions = sqliteTable("subscriptions", {
   lastError: text("last_error"),
   lastPulledAt: integer("last_pulled_at"),
   lastClient: text("last_client"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const templates = sqliteTable("templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  /** SubBoost-compatible `subboost-template-config/v1` JSON. */
+  config: text("config").notNull(),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

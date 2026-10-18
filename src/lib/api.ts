@@ -9,6 +9,10 @@ export type SubscriptionInput = InferRequestType<typeof api.subscriptions.$post>
 export type PreviewResult = InferResponseType<typeof api.preview.$post, 200>;
 export type Meta = InferResponseType<typeof api.meta.$get, 200>;
 export type PullStats = InferResponseType<typeof api.stats.pulls.$get, 200>;
+export type TemplateSummary = InferResponseType<typeof api.templates.$get, 200>["items"][number];
+export type TemplateDetail = InferResponseType<(typeof api.templates)[":id"]["$get"], 200>;
+export type TemplateConfig = Meta["templateDefaults"]["minimal"];
+export type TemplateInput = InferRequestType<typeof api.templates.$post>["json"];
 
 export class ApiError extends Error {
   constructor(

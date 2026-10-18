@@ -8,6 +8,8 @@ import { SettingsPage } from "@/pages/settings";
 import { SubscriptionDetailPage } from "@/pages/subscription-detail";
 import { SubscriptionEditPage } from "@/pages/subscription-edit";
 import { SubscriptionsPage } from "@/pages/subscriptions";
+import { TemplateEditPage } from "@/pages/template-edit";
+import { BuiltinTemplatePage, TemplatesPage } from "@/pages/templates";
 
 export default function App() {
   const me = useMe();
@@ -32,6 +34,10 @@ export default function App() {
         <Route path="/subscriptions/new">{() => <SubscriptionEditPage />}</Route>
         <Route path="/subscriptions/:id/edit">{(p) => <SubscriptionEditPage id={p.id} />}</Route>
         <Route path="/subscriptions/:id">{(p) => <SubscriptionDetailPage id={p.id} />}</Route>
+        <Route path="/templates" component={TemplatesPage} />
+        <Route path="/templates/new">{() => <TemplateEditPage />}</Route>
+        <Route path="/templates/builtin/:id">{(p) => <BuiltinTemplatePage id={p.id} />}</Route>
+        <Route path="/templates/:id">{(p) => <TemplateEditPage id={p.id} />}</Route>
         <Route path="/settings" component={SettingsPage} />
         <Route>
           <Redirect to="/" />

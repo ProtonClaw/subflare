@@ -3,12 +3,12 @@ import { Link } from "wouter";
 import { PageHeader, Panel, StatusDot } from "@/components/kit";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSubscriptions } from "@/hooks/use-api";
+import { useSubscriptions, useTemplateName } from "@/hooks/use-api";
 import { subscriptionUrl, type SubscriptionSummary } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatRelative } from "@/lib/format";
 import { issuesOf } from "@/lib/insights";
-import { MODE_META, TEMPLATE_LABEL } from "@/lib/modes";
+import { MODE_META } from "@/lib/modes";
 
 export function SubscriptionsPage() {
   const subs = useSubscriptions();
@@ -60,6 +60,7 @@ export function SubscriptionsPage() {
 function Row({ sub, now }: { sub: SubscriptionSummary; now: number }) {
   const mode = MODE_META[sub.mode];
   const issue = issuesOf(sub, now)[0];
+  const templateName = useTemplateName();
 
   return (
     <li>
@@ -74,7 +75,7 @@ function Row({ sub, now }: { sub: SubscriptionSummary; now: number }) {
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium">{sub.name}</div>
           <div className="mt-0.5 truncate text-sm text-muted-foreground">
-            {mode.label} · {TEMPLATE_LABEL[sub.template]}模板 · {sub.sourceCount} 个来源
+            {mode.label} · {templateName(sub.template, sub.templateId)} · {sub.sourceCount} 个来源
           </div>
         </div>
 

@@ -4,11 +4,15 @@ import {
   unwrap,
   type Meta,
   type PullStats,
+  type TemplateDetail,
+  type TemplateInput,
+  type TemplateSummary,
   type PreviewResult,
   type SubscriptionDetail,
   type SubscriptionInput,
   type SubscriptionSummary,
 } from "@/lib/api";
+import { TEMPLATE_LABEL } from "@/lib/modes";
 
 type Me = { configured: boolean; authenticated: boolean };
 
@@ -17,6 +21,7 @@ export const keys = {
   meta: ["meta"] as const,
   list: ["subscriptions"] as const,
   pulls: ["stats", "pulls"] as const,
+  templates: ["templates"] as const,
   detail: (id: string) => ["subscriptions", id] as const,
 };
 
@@ -126,5 +131,48 @@ export function useDeleteSubscription() {
       void qc.invalidateQueries({ queryKey: keys.pulls });
       return qc.invalidateQueries({ queryKey: keys.list, exact: true });
     },
+  });
+}
+
+export function useTemplates() {
+  return useQuery({
+    queryKey: keys.templates,
+    queryFn: async () => (await unwrap<{ items: TemplateSummary[] }>(api.templates.$get())).items,
+  });
+}
+
+/** Display name for a subscription's template, preferring the custom template name. */
+export function useTemplateName() {
+  const templates = useTemplates();
+  return (base: TemplateSummary["base"], templateId: string | null | undefined) => {
+    const custom = templateId ? templates.data?.find((t) => t.id === templateId) : undefined;
+    return custom ? custom.name : `${TEMPLATE_LABEL[base]}模板`;
+  };
+}
+
+export function useTemplate(id: string | null) {
+  return useQuery({
+    queryKey: [...keys.templates, id ?? ""],
+    queryFn: () => unwrap<TemplateDetail>(api.templates[":id"].$get({ param: { id: id! } })),
+    enabled: !!id,
+  });
+}
+
+export function useSaveTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id?: string; input: TemplateInput }) =>
+      unwrap<Omit<TemplateDetail, "usedBy">>(
+        id ? api.templates[":id"].$put({ param: { id }, json: input }) : api.templates.$post({ json: input })
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.templates }),
+  });
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unwrap<{ ok: true }>(api.templates[":id"].$delete({ param: { id } })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.templates }),
   });
 }

@@ -49,12 +49,13 @@ import {
   useRefreshSubscription,
   useRotateToken,
   useSubscription,
+  useTemplateName,
 } from "@/hooks/use-api";
 import { subscriptionUrl, type SubscriptionDetail } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatBytes, formatDate, formatRelative, intervalLabel } from "@/lib/format";
 import { daysUntil, EXPIRY_WARN_DAYS, usageOf } from "@/lib/insights";
-import { MODE_META, TEMPLATE_LABEL } from "@/lib/modes";
+import { MODE_META } from "@/lib/modes";
 import { sourceLabel } from "@/lib/sources";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +98,7 @@ function Detail({ sub, now }: { sub: SubscriptionDetail; now: number }) {
   const rotate = useRotateToken();
   const remove = useDeleteSubscription();
   const mode = MODE_META[sub.mode];
+  const templateName = useTemplateName();
 
   const doRefresh = () =>
     refresh.mutate(sub.id, {
@@ -134,7 +136,7 @@ function Detail({ sub, now }: { sub: SubscriptionDetail; now: number }) {
               <mode.icon className="size-3" /> {mode.label}
             </Badge>
             <Badge variant="outline" className="rounded-full">
-              {TEMPLATE_LABEL[sub.config.template]}模板
+              {templateName(sub.config.template, sub.config.templateId)}
             </Badge>
           </span>
         }

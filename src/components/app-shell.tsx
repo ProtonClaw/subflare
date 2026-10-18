@@ -1,6 +1,7 @@
 import {
   ChevronsUpDownIcon,
   LayoutDashboardIcon,
+  LayoutTemplateIcon,
   ListIcon,
   LogOutIcon,
   MenuIcon,
@@ -41,6 +42,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
         match: (p) => p.startsWith("/subscriptions") && p !== "/subscriptions/new",
       },
       { href: "/subscriptions/new", label: "新建订阅", icon: PlusIcon, match: (p) => p === "/subscriptions/new" },
+      { href: "/templates", label: "模板库", icon: LayoutTemplateIcon, match: (p) => p.startsWith("/templates") },
     ],
   },
   {

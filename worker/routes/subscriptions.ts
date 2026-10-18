@@ -1,12 +1,14 @@
+import { DEFAULT_BASE_CONFIG_YAML, buildDefaultSubBoostTemplateConfig } from "@subboost/core/config/defaults";
 import { CATEGORY_INFO, PROXY_GROUP_MODULES, getModulesForTemplate } from "@subboost/core/generator/proxy-groups";
 import { getTemplateList } from "@subboost/core/templates";
 import type { ParsedNode } from "@subboost/core/types/node";
 import { Hono } from "hono";
 import { z } from "zod";
 import { createD1SubscriptionRepository, utcDay, type NewSubscription, type Subscription } from "../db/repo";
+import { createD1TemplateRepository } from "../db/templates-repo";
 import { requireAuth, type AuthEnv } from "../lib/auth";
 import { validate } from "../lib/validate";
-import { invalidateYaml, renderYaml } from "../lib/render";
+import { invalidateYaml, loadTemplateConfig, renderYaml } from "../lib/render";
 import { collectNodes, summarizeErrors } from "../lib/sources";
 
 const MAX_PREVIEW_NODES = 500;
@@ -26,6 +28,7 @@ const SubscriptionInputSchema = z.object({
     sources: z.array(SourceSchema).min(1).max(20),
     template: z.enum(["minimal", "standard", "full"]),
     enabledGroups: z.array(z.string().max(64)).max(200).optional(),
+    templateId: z.string().min(1).max(64).optional(),
   }),
   autoUpdateInterval: z.number().int().min(1800).max(7 * 86400).nullable(),
 });
@@ -44,6 +47,11 @@ function toDetail(sub: Subscription) {
 function newToken(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function templateMissing(db: D1Database, input: NewSubscription): Promise<boolean> {
+  const id = input.config.templateId;
+  return !!id && !(await createD1TemplateRepository(db).get(id));
 }
 
 async function collectFor(input: Pick<NewSubscription, "mode" | "config">, previous?: Subscription) {
@@ -69,14 +77,21 @@ export const subscriptionRoutes = base
   .get("/meta", (c) =>
     c.json({
       templates: getTemplateList().map((t) => ({ ...t, groups: getModulesForTemplate(t.id) })),
-      modules: PROXY_GROUP_MODULES.map(({ id, name, emoji, category, description }) => ({
+      modules: PROXY_GROUP_MODULES.map(({ id, name, emoji, category, description, rules }) => ({
         id,
         name,
         emoji,
         category,
         description,
+        ruleCount: rules.length,
       })),
       categories: CATEGORY_INFO,
+      templateDefaults: {
+        minimal: buildDefaultSubBoostTemplateConfig("minimal"),
+        standard: buildDefaultSubBoostTemplateConfig("standard"),
+        full: buildDefaultSubBoostTemplateConfig("full"),
+      },
+      baseConfigYaml: DEFAULT_BASE_CONFIG_YAML,
     })
   )
   .post("/preview", validate("json", PreviewSchema), async (c) => {
@@ -121,6 +136,7 @@ export const subscriptionRoutes = base
   })
   .post("/subscriptions", validate("json", SubscriptionInputSchema), async (c) => {
     const input = c.req.valid("json");
+    if (await templateMissing(c.env.DB, input)) return c.json({ error: "模板不存在", code: "TEMPLATE_NOT_FOUND" as const }, 400);
     const refresh = await collectFor(input);
     const sub = await createD1SubscriptionRepository(c.env.DB).create(
       { ...input, id: crypto.randomUUID(), token: newToken() },
@@ -137,6 +153,7 @@ export const subscriptionRoutes = base
     const previous = await repo.get(c.req.param("id"));
     if (!previous) return c.json({ error: "Not Found" }, 404);
     const input = c.req.valid("json");
+    if (await templateMissing(c.env.DB, input)) return c.json({ error: "模板不存在", code: "TEMPLATE_NOT_FOUND" as const }, 400);
     const refresh = await collectFor(input, previous);
     const sub = await repo.update(previous.id, input, refresh);
     if (!sub) return c.json({ error: "Not Found" }, 404);
@@ -169,6 +186,6 @@ export const subscriptionRoutes = base
   .get("/subscriptions/:id/yaml", async (c) => {
     const sub = await createD1SubscriptionRepository(c.env.DB).get(c.req.param("id"));
     if (!sub) return c.json({ error: "Not Found" }, 404);
-    const yaml = renderYaml(sub);
+    const yaml = renderYaml(sub, await loadTemplateConfig(c.env.DB, sub));
     return yaml === null ? c.json({ error: "没有可用节点" }, 422) : c.text(yaml, 200);
   });
